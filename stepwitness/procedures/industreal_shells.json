@@ -1,0 +1,35 @@
+{
+  "note": "Loose-shell indices per component in the two complete state meshes, ordered as tools/blender_split_states.py orders them (by shell centre). Draft from set differences and contact sheets; validated by tools/blender_derive_states.py, which rebuilds every labelled state by deleting groups and renders it beside the dataset's own file.",
+  "state13": {
+    "source": "state13.fbx",
+    "state": "11110111111",
+    "base": [26, 27],
+    "components": {
+      "1": [21, 22],
+      "2": [23, 24, 25],
+      "3": [8, 9, 16],
+      "5": [13, 14, 15],
+      "6": [10, 11, 12],
+      "7": [34],
+      "8": [17, 18, 19, 20],
+      "9": [28, 29, 30, 31, 32, 33],
+      "10": [0, 1, 2, 3, 4, 5, 6, 7]
+    }
+  },
+  "state22": {
+    "source": "state22.fbx",
+    "state": "11101111111",
+    "base": [26, 27],
+    "components": {
+      "1": [21, 22],
+      "2": [23, 24, 25],
+      "4": [8, 9, 16],
+      "5": [13, 14, 15],
+      "6": [10, 11, 12],
+      "7": [34],
+      "8": [17, 18, 19, 20],
+      "9": [28, 29, 30, 31, 32, 33],
+      "10": [0, 1, 2, 3, 4, 5, 6, 7]
+    }
+  }
+}
