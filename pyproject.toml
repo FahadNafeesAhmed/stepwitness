@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "rapidfuzz"]
 
 [build-system]
 requires = ["setuptools>=68"]
