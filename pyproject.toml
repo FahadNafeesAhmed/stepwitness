@@ -15,6 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "rapidfuzz"]
+serve = ["fastapi", "uvicorn"]
 
 [build-system]
 requires = ["setuptools>=68"]
