@@ -5,8 +5,10 @@ printed sheet is not published; this text is the input the procedure compiler re
 `stepwitness/procedures/industreal_assembly.json` cites these line numbers.
 
 The front and rear subgoals may be built in either order. Within a subgoal, pins go in after the
-part they secure. The bracket needs both subgoals complete. Front wheels need the bracket and its screw.
-Rear wheels need both subgoals complete.
+part they secure, and the subgoal counts as complete only when its part and every one of its pins
+are in. The bracket needs both subgoals complete, which means lines 3, 5 and 6 done. Front wheels
+need the bracket and its screw. Rear wheels need both subgoals complete, lines 3, 5 and 6. Line 1
+describes the starting condition and is not a step.
 
 1. Start from the base.
 2. Fit the front chassis onto the base.

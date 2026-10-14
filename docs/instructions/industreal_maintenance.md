@@ -5,8 +5,9 @@ component upgrade: replace the rear chassis with long braces by the rear chassis
 The graph in `stepwitness/procedures/industreal_maintenance.json` cites these line numbers.
 
 The rear wheels and the two rear pins may be removed in any order. The rear chassis comes off only
-once both pins and the rear wheels are off. The new pins go in after the short chassis, in either
-order. The rear wheels go back on last.
+once both pins and the rear wheels are off, which means lines 2, 3 and 4 done. The new pins go in
+after the short chassis, in either order. The rear wheels go back on last, after both new pins,
+lines 7 and 8. Line 1 describes the starting condition and is not a step.
 
 1. Start from the fully assembled car.
 2. Remove the rear wheel assembly.
