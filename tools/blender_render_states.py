@@ -101,17 +101,53 @@ def world_bbox(objects) -> tuple[Vector, Vector]:
     return lo, hi
 
 
-def jitter_materials(rng: random.Random, amount: float = 0.06) -> None:
+def snapshot_material_colors() -> dict:
+    out = {}
     for mat in bpy.data.materials:
         if not mat.use_nodes:
             continue
         for node in mat.node_tree.nodes:
             if node.type == "BSDF_PRINCIPLED":
-                c = list(node.inputs["Base Color"].default_value)
+                out[mat.name] = tuple(node.inputs["Base Color"].default_value)
+    return out
+
+
+def jitter_materials(rng: random.Random, originals: dict, gain: float = 0.15, offset: float = 0.02) -> None:
+    """Multiplicative brightness jitter plus a small additive term, so dark parts stay dark instead
+    of picking up a random hue (an additive jitter alone turned the black wheels olive and purple)."""
+    for mat in bpy.data.materials:
+        if mat.name not in originals or not mat.use_nodes:
+            continue
+        g = 1.0 + rng.uniform(-gain, gain)
+        o = rng.uniform(-offset, offset)
+        for node in mat.node_tree.nodes:
+            if node.type == "BSDF_PRINCIPLED":
+                c = list(originals[mat.name])
                 for i in range(3):
-                    c[i] = min(1.0, max(0.0, c[i] + rng.uniform(-amount, amount)))
+                    c[i] = min(1.0, max(0.0, c[i] * g + o))
                 node.inputs["Base Color"].default_value = c
                 node.inputs["Roughness"].default_value = rng.uniform(0.35, 0.75)
+
+
+GENERATED_MATERIALS = ("TableMat", "Silver", "MagentaPart", "WhitePart", "Skin")
+
+
+def clear_generated() -> None:
+    """Remove everything that is not the imported assembly, so the next sample starts clean
+    without re-importing the FBX."""
+    for ob in list(bpy.data.objects):
+        if not ob.get("is_assembly"):
+            bpy.data.objects.remove(ob, do_unlink=True)
+    for coll, keep in ((bpy.data.lights, ()), (bpy.data.cameras, ())):
+        for item in list(coll):
+            if item.users == 0:
+                coll.remove(item)
+    for mat in list(bpy.data.materials):
+        if mat.name.split(".")[0] in GENERATED_MATERIALS:
+            bpy.data.materials.remove(mat)
+    for mesh in list(bpy.data.meshes):
+        if mesh.users == 0:
+            bpy.data.meshes.remove(mesh)
 
 
 def make_material(name: str, rgb, roughness: float = 0.6):
@@ -155,7 +191,7 @@ def add_lights(rng: random.Random, center: Vector, radius: float) -> list[dict]:
         pos = center + Vector((d * math.cos(el) * math.cos(az), d * math.cos(el) * math.sin(az), d * math.sin(el)))
         kind = rng.choice(["AREA", "POINT", "SUN"])
         light_data = bpy.data.lights.new(f"Light{i}", kind)
-        energy = {"AREA": rng.uniform(2e5, 1.2e6), "POINT": rng.uniform(2e5, 1.5e6), "SUN": rng.uniform(1.5, 6.0)}[kind]
+        energy = {"AREA": rng.uniform(5e4, 4e5), "POINT": rng.uniform(5e4, 5e5), "SUN": rng.uniform(0.5, 2.5)}[kind]
         light_data.energy = energy
         temp = rng.uniform(0.85, 1.0)
         light_data.color = (1.0, temp, temp * rng.uniform(0.85, 1.0))
@@ -170,7 +206,8 @@ def add_lights(rng: random.Random, center: Vector, radius: float) -> list[dict]:
     world = bpy.context.scene.world
     bg = world.node_tree.nodes["Background"]
     bg.inputs["Color"].default_value = (*[rng.uniform(0.2, 0.9)] * 3, 1.0)
-    bg.inputs["Strength"].default_value = rng.uniform(0.2, 1.2)
+    bg.inputs["Strength"].default_value = rng.uniform(0.1, 0.8)
+    bpy.context.scene.view_settings.exposure = rng.uniform(-0.8, 0.3)
     return specs
 
 
@@ -186,7 +223,7 @@ def add_camera(rng: random.Random, center: Vector, radius: float, size: tuple[in
     # head-camera geometry: above the table, looking down between 30 and 75 degrees
     az = rng.uniform(0, 2 * math.pi)
     el = rng.uniform(math.radians(30), math.radians(75))
-    d = radius * rng.uniform(2.2, 5.0)
+    d = radius * rng.uniform(1.8, 4.2)
     pos = center + Vector((d * math.cos(el) * math.cos(az), d * math.cos(el) * math.sin(az), d * math.sin(el)))
     # look near the assembly, not exactly at it, so it is not always centred
     target = center + Vector((rng.uniform(-radius, radius), rng.uniform(-radius, radius), 0.0)) * 0.8
@@ -293,14 +330,16 @@ def project_bbox(objects, size: tuple[int, int]) -> list[float] | None:
 def render_state(state_no: int, fbx: Path, out: Path, n: int, seed: int, size, engine, samples, states) -> list[dict]:
     records = []
     code = state_str(states[state_no])
+    reset_scene(engine, size, samples)
+    meshes = import_state(fbx)
+    originals = snapshot_material_colors()
+    lo, hi = world_bbox(meshes)
+    center = (lo + hi) / 2
+    radius = max((hi - lo).length / 2, 1.0)
     for k in range(n):
         rng = random.Random(seed * 100003 + state_no * 1009 + k)
-        reset_scene(engine, size, samples)
-        meshes = import_state(fbx)
-        jitter_materials(rng)
-        lo, hi = world_bbox(meshes)
-        center = (lo + hi) / 2
-        radius = max((hi - lo).length / 2, 1.0)
+        clear_generated()
+        jitter_materials(rng, originals)
         add_table(rng, lo, hi, extent=radius * 30)
         lights = add_lights(rng, center, radius)
         cam = add_camera(rng, center, radius, size)
