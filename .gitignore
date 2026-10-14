@@ -20,3 +20,6 @@ runs/
 .idea/
 .DS_Store
 Thumbs.db
+
+# build metadata from the editable install
+*.egg-info/
