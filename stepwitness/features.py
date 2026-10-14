@@ -26,7 +26,9 @@ class Embedder:
 
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.processor = AutoImageProcessor.from_pretrained(str(model_dir))
-        self.model = AutoModel.from_pretrained(str(model_dir)).to(self.device).eval()
+        # load on the CPU first: a direct load onto the GPU maps the safetensors file through the
+        # Windows page file and fails with "paging file too small" when memory is tight
+        self.model = AutoModel.from_pretrained(str(model_dir), device_map="cpu", low_cpu_mem_usage=True).to(self.device).eval()
         self.pooling = pooling
         self.image_size = image_size
         for p in self.model.parameters():
