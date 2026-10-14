@@ -112,8 +112,8 @@ def classify_shell(ob) -> dict:
         elif L < 30:
             cls = "other"  # small screws and nuts
     elif colour == "Magenta":
-        if S >= 18 and L <= 16:
-            cls = "knob"
+        if L >= 18 and M <= 16 and S >= 8:
+            cls = "knob"  # the thumb knob of the front chassis pin: tall and narrow
         elif near(L, 16, 2) and near(M, 16, 3) and S >= 10:
             cls = "pulley"
         elif L <= 14 and S <= 6:
@@ -124,16 +124,12 @@ def classify_shell(ob) -> dict:
         if L >= 70 and S <= 5:
             cls = "brace_long"
         elif near(L, 50, 4) and S <= 5 and M <= 15:
-            cls = "brace_short" if M >= 10 else "plate"
-        elif near(L, 50, 4) and S <= 4:
-            cls = "plate"
+            # plates and short braces share 50 x 12 x 3; plates lie flat (thin axis z), braces stand (thin axis y)
+            cls = "plate" if d.z <= 5 else "brace_short"
         elif L >= 24 and M >= 24 and S >= 10:
             cls = "block"
         elif near(L, 50, 4) and M >= 11 and S >= 11:
             cls = "beam"
-    # distinguish short brace from plate: braces are 12 mm tall, plates are 3 mm thick
-    if cls == "brace_short" and S > 5:
-        cls = "other"
     return {"name": ob.name, "class": cls, "colour": colour, "center": list(c), "dims": [d.x, d.y, d.z], "lo": list(lo), "hi": list(hi)}
 
 
@@ -172,16 +168,19 @@ def classify_file(shells: list) -> list[dict]:
         p["orientation"] = "vertical" if d[2] >= max(d[0], d[1]) else "horizontal"
 
     # components
+    knobs = [p for p in parts if p["class"] == "knob"]
     horizontal = sorted([p for p in pins if p["orientation"] == "horizontal"], key=toward_rear)
-    vertical = sorted([p for p in pins if p["orientation"] == "vertical"], key=toward_rear)
+    vertical = [p for p in pins if p["orientation"] == "vertical"]
     comp_of_pin = {}
     if len(horizontal) >= 2:
         comp_of_pin[id(horizontal[-1])] = 6  # nearest the rear end
         comp_of_pin[id(horizontal[-2])] = 5
     elif len(horizontal) == 1:
         comp_of_pin[id(horizontal[0])] = None  # ambiguous: resolved by the caller from the state code
-    if vertical:
-        comp_of_pin[id(vertical[0])] = 2  # the vertical pin nearest the rear is the front chassis pin
+    for p in vertical:
+        pc = Vector(p["center"])
+        has_knob = any((pc - Vector(k["center"])).length < 30 for k in knobs)
+        comp_of_pin[id(p)] = 2 if has_knob else 8  # the front chassis pin carries the thumb knob; the other vertical pin is the bracket screw
     for p in pins:
         p["component"] = comp_of_pin.get(id(p))
     for p in parts:
@@ -200,15 +199,15 @@ def classify_file(shells: list) -> list[dict]:
         elif cls == "plate":
             p["component"] = 1
         elif cls == "knob":
-            p["component"] = 2 if vertical and (pc - Vector(vertical[0]["center"])).length < 30 else 8
+            p["component"] = 2
         elif cls == "block":
-            p["component"] = 7 if p["colour"] == "Magenta" else 0
+            p["component"] = 9 if p["colour"] == "Magenta" else 7  # magenta block carries the front axle; white block is the bracket
         elif cls == "beam":
             p["component"] = 0
         elif cls == "pin":
             pass
         else:
-            p.setdefault("component", None)
+            p["component"] = 0 if p["colour"] == "Metallic silver" and p["dims"][2] > 20 else None
     return parts
 
 
