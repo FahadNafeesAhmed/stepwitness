@@ -9,7 +9,17 @@ labelled execution errors and published part geometry.
 
 ## Status
 
-Phase 0: reproducing the published baseline. No result of this project has been measured yet.
+No result of this project has been measured yet. Code is in place for every phase; numbers follow.
+
+| Phase | What | State |
+|---|---|---|
+| 0 | reproduce the published baseline from the authors' predictions | tooling ready, waiting on the test-label archives |
+| 1 | procedure graph, LLM compiler, validation against the 22 labelled states | done, 10 tests |
+| 2 | render factory: correct states and generated errors from the CAD | done, first batch rendering |
+| 3 | verifier (frozen DINOv2, prototypes, head) and one-class localizer | code ready, training next |
+| 4 | step recognizer and the PSR evaluation bridge | done, 7 tests |
+| 5 | evidence timeline and viewer | done, 3 tests |
+| 6 | edge profile (FP32, FP16, INT8 when TensorRT is available) | profiler ready |
 
 ## Layout
 
