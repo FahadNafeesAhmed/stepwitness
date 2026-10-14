@@ -1,0 +1,22 @@
+# environments
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# data, reference code, and run outputs are never committed
+data/
+third_party/
+runs/
+
+# exported models
+*.onnx
+*.engine
+*.pt
+*.pth
+
+# editor and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
