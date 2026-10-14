@@ -1,0 +1,21 @@
+{
+  "name": "industreal_maintenance",
+  "instruction_sheet": "docs/instructions/industreal_maintenance.md",
+  "start_state": "11110111111",
+  "observable_only_with": {
+    "1": [2],
+    "3": [5, 6],
+    "4": [5, 6],
+    "7": [8]
+  },
+  "steps": [
+    {"id": 32, "component": 10, "kind": "remove", "requires": [], "subgoal": "strip", "line": 2, "text": "Remove the rear wheel assembly."},
+    {"id": 17, "component": 5, "kind": "remove", "requires": [], "subgoal": "strip", "line": 3, "text": "Pull the front-rear chassis pin."},
+    {"id": 20, "component": 6, "kind": "remove", "requires": [], "subgoal": "strip", "line": 4, "text": "Pull the rear-rear chassis pin."},
+    {"id": 11, "component": 3, "kind": "remove", "requires": [17, 20, 32], "subgoal": "strip", "line": 5, "text": "Lift off the rear chassis with the long braces."},
+    {"id": 12, "component": 4, "kind": "install", "requires": [11], "subgoal": "refit", "line": 6, "text": "Fit the short rear chassis onto the base."},
+    {"id": 15, "component": 5, "kind": "install", "requires": [12], "subgoal": "refit", "line": 7, "text": "Secure the short rear chassis with the front-rear chassis pin."},
+    {"id": 18, "component": 6, "kind": "install", "requires": [12], "subgoal": "refit", "line": 8, "text": "Secure the short rear chassis with the rear-rear chassis pin."},
+    {"id": 30, "component": 10, "kind": "install", "requires": [15, 18], "subgoal": "refit", "line": 9, "text": "Reinstall the rear wheel assembly."}
+  ]
+}

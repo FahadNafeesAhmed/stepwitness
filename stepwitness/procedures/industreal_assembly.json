@@ -1,0 +1,22 @@
+{
+  "name": "industreal_assembly",
+  "instruction_sheet": "docs/instructions/industreal_assembly.md",
+  "start_state": "10000000000",
+  "observable_only_with": {
+    "1": [2],
+    "3": [5, 6],
+    "4": [5, 6],
+    "7": [8]
+  },
+  "steps": [
+    {"id": 3, "component": 1, "kind": "install", "requires": [], "subgoal": "front", "line": 2, "text": "Fit the front chassis onto the base."},
+    {"id": 6, "component": 2, "kind": "install", "requires": [3], "subgoal": "front", "line": 3, "text": "Secure the front chassis with the front chassis pin."},
+    {"id": 9, "component": 3, "kind": "install", "requires": [], "subgoal": "rear", "line": 4, "text": "Fit the rear chassis onto the base."},
+    {"id": 15, "component": 5, "kind": "install", "requires": [9], "subgoal": "rear", "line": 5, "text": "Secure the rear chassis with the front-rear chassis pin."},
+    {"id": 18, "component": 6, "kind": "install", "requires": [9], "subgoal": "rear", "line": 6, "text": "Secure the rear chassis with the rear-rear chassis pin."},
+    {"id": 21, "component": 7, "kind": "install", "requires": [6, 15, 18], "subgoal": "bracket", "line": 7, "text": "Mount the front bracket."},
+    {"id": 24, "component": 8, "kind": "install", "requires": [21], "subgoal": "bracket", "line": 8, "text": "Fix the front bracket with its screw."},
+    {"id": 27, "component": 9, "kind": "install", "requires": [24], "subgoal": "wheels", "line": 9, "text": "Install the front wheel assembly."},
+    {"id": 30, "component": 10, "kind": "install", "requires": [6, 15, 18], "subgoal": "wheels", "line": 10, "text": "Install the rear wheel assembly."}
+  ]
+}
