@@ -398,8 +398,19 @@ def apply_error(rng: random.Random, shells: list, parts: list[dict], component: 
                 hide(ob)
         else:
             axles = [p for _, p in members if p["class"] == "axle"]
-            axis = long_axis(axles[0]) if axles else Vector((0, 1, 0))
-            outward = axis if (Vector(wp["center"]) - Vector(axles[0]["center"])).dot(axis) > 0 else -axis
+            if axles:
+                axis = long_axis(axles[0])
+                origin = Vector(axles[0]["center"])
+            else:
+                # no axle shell classified in this file: the wheel's thin dimension is the axle direction
+                # and the other wheel of the pair gives the inward direction
+                d = wp["dims"]
+                k = min(range(3), key=lambda i: d[i])
+                axis = Vector((0, 0, 0))
+                axis[k] = 1.0
+                others = [p for _, p in members if p["class"] == "wheel" and p is not wp]
+                origin = Vector(others[0]["center"]) if others else Vector(wp["center"]) - axis
+            outward = axis if (Vector(wp["center"]) - origin).dot(axis) > 0 else -axis
             shift = outward * rng.uniform(8, 16)
             for ob in [wheel] + nuts:
                 ob.location = ob.location + shift
