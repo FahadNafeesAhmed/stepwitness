@@ -43,3 +43,31 @@ git clone https://github.com/TimSchoonbeek/IndustReal third_party/IndustReal
 ```
 
 Torch, torchvision and OpenCV come from the system Python on the development machine.
+
+## Running each phase
+
+```
+# 0  reproduce the published baseline (needs the test label files, see docs/data_manifest.md)
+python tools/extract_labels.py data/industreal/zips/test_p1.zip data/industreal/zips/test_p2.zip data/industreal/zips/test_p3.zip
+python scripts/reproduce_baseline.py --out runs/phase0
+
+# 1  compile an instruction sheet into a graph with a local LLM and check it against the labelled states
+python scripts/compile_procedure.py --sheet docs/instructions/industreal_assembly.md --name industreal_assembly --start-state 10000000000 --labelled 1-13
+
+# 2  render the training set (Blender, GPU)
+third_party/blender/blender-4.5.14-windows-x64/blender.exe -b --python tools/blender_render_dataset.py --     --fbx-dir data/industreal/part_geometries/part_geometries --out data/renders/v2 --states all --per-state 600 --error-fraction 0.5 --seed 100
+
+# 3  build the verifier and train the localizer
+python scripts/build_verifier.py --renders data/renders/v2 --out runs/phase3/verifier_v2
+python scripts/train_localizer.py --renders data/renders/v2 --out runs/phase3/localizer_v2 --model data/models/yolo/yolov8n.pt --epochs 20
+
+# 4  run the monitor on the test recordings and score it with the authors' metric code
+python scripts/run_monitor.py --verifier runs/phase3/verifier_v2 --localizer runs/phase3/localizer_v2/train/weights/best.pt --out runs/phase4/monitor_v2
+python scripts/evaluate_psr.py --predictions runs/phase4/monitor_v2 --out runs/phase4/monitor_v2
+
+# 5  review the evidence timeline in a browser
+python scripts/serve_timeline.py --events runs/phase4/monitor_v2
+
+# 6  measure the deployed cost
+python scripts/profile_edge.py --video data/industreal/videos/03_assy_0_1.mp4 --verifier runs/phase3/verifier_v2 --localizer runs/phase3/localizer_v2/train/weights/best.pt --out runs/phase6/profile_v2
+```
