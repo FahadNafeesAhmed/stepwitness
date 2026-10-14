@@ -30,11 +30,26 @@ KEEP = {
 SPLITS = ("train", "val", "test")
 
 
-def recording_of(parts: tuple[str, ...]) -> tuple[str, str] | None:
-    """Return (split, recording) for a member path such as .../test/03_assy_0_1/rgb/000001.jpg."""
+def recording_of(parts: tuple[str, ...], default_split: str | None) -> tuple[str, str] | None:
+    """Return (split, recording) for a member path.
+
+    The published archives are laid out as ``<recording>/<modality>/<frame>.jpg`` with the split
+    only in the archive's name (``test_p1.zip``), so the split falls back to ``default_split``.
+    A ``.../test/<recording>/...`` layout is also accepted.
+    """
     for i, p in enumerate(parts):
         if p in SPLITS and i + 1 < len(parts):
             return p, parts[i + 1]
+    if default_split and len(parts) >= 2:
+        return default_split, parts[0]
+    return None
+
+
+def split_from_name(zpath: Path) -> str | None:
+    stem = zpath.stem.lower()
+    for s in SPLITS:
+        if stem.startswith(s):
+            return s
     return None
 
 
@@ -52,12 +67,13 @@ def main() -> None:
     for zpath in args.zips:
         written: dict[str, int] = defaultdict(int)
         frames: dict[str, int] = defaultdict(int)
+        default_split = split_from_name(zpath)
         with zipfile.ZipFile(zpath) as zf:
             for info in zf.infolist():
                 if info.is_dir():
                     continue
                 parts = Path(info.filename).parts
-                hit = recording_of(parts)
+                hit = recording_of(parts, default_split)
                 if hit is None:
                     continue
                 split, rec = hit
