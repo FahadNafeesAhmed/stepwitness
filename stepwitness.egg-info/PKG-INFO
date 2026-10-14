@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: stepwitness
+Version: 0.0.1
+Summary: Procedure monitoring from a work instruction and CAD, with no labelled video
+Requires-Python: >=3.11
+Requires-Dist: numpy
+Requires-Dist: opencv-python-headless
+Requires-Dist: matplotlib
+Requires-Dist: bounding-box
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: rapidfuzz; extra == "dev"

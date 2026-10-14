@@ -1,0 +1,8 @@
+numpy
+opencv-python-headless
+matplotlib
+bounding-box
+
+[dev]
+pytest
+rapidfuzz

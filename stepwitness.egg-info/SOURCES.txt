@@ -1,0 +1,12 @@
+README.md
+pyproject.toml
+stepwitness/__init__.py
+stepwitness/metrics.py
+stepwitness.egg-info/PKG-INFO
+stepwitness.egg-info/SOURCES.txt
+stepwitness.egg-info/dependency_links.txt
+stepwitness.egg-info/requires.txt
+stepwitness.egg-info/top_level.txt
+stepwitness/compat/__init__.py
+stepwitness/compat/weighted_levenshtein.py
+tests/test_metrics.py
