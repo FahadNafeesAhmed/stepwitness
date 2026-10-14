@@ -180,7 +180,9 @@ def classify_file(shells: list) -> list[dict]:
     for p in vertical:
         pc = Vector(p["center"])
         has_knob = any((pc - Vector(k["center"])).length < 30 for k in knobs)
-        comp_of_pin[id(p)] = 2 if has_knob else 8  # the front chassis pin carries the thumb knob; the other vertical pin is the bracket screw
+        # state 9 adds the bracket block, a second vertical pin and the knob together: the knob sits on
+        # the bracket screw (8); the plain vertical pin on the plates is the front chassis pin (2)
+        comp_of_pin[id(p)] = 8 if has_knob else 2
     for p in pins:
         p["component"] = comp_of_pin.get(id(p))
     for p in parts:
@@ -199,7 +201,7 @@ def classify_file(shells: list) -> list[dict]:
         elif cls == "plate":
             p["component"] = 1
         elif cls == "knob":
-            p["component"] = 2
+            p["component"] = 8
         elif cls == "block":
             p["component"] = 9 if p["colour"] == "Magenta" else 7  # magenta block carries the front axle; white block is the bracket
         elif cls == "beam":
