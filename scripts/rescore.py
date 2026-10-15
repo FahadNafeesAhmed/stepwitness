@@ -69,11 +69,12 @@ def main() -> None:
     ap.add_argument("--error-margin", type=float, default=0.10)
     ap.add_argument("--reach", type=int, default=0, help="keep posterior mass only on states within this many transitions of the current state (0 = off)")
     ap.add_argument("--stable-frames", type=int, default=0, help="the top state must hold this many consecutive frames before it earns credit (0 = off)")
+    ap.add_argument("--release-frames", type=int, default=0, help="with reach on: frames of confident unreachable readings before the verifier is trusted (0 = never)")
     ap.add_argument("--no-score", action="store_true")
     args = ap.parse_args()
 
     config = RecognizerConfig(threshold=args.threshold, decay=args.decay, min_posterior=args.min_posterior, error_frames=args.error_frames,
-                              error_margin=args.error_margin, reach=args.reach, stable_frames=args.stable_frames)
+                              error_margin=args.error_margin, reach=args.reach, stable_frames=args.stable_frames, release_frames=args.release_frames)
     proc_info = json.loads((ROOT / "third_party" / "IndustReal" / "PSR" / "procedure_info.json").read_text())
     files = sorted(args.posteriors.glob("*.posteriors.npz"))
     if not files:

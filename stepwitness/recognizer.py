@@ -39,6 +39,7 @@ class RecognizerConfig:
     hold_floor: float = 0.25  # top posterior below this counts as low confidence
     reach: int = 0  # credit only mass on states within this many transitions of the current state (0 = off)
     stable_frames: int = 0  # the top state must hold this many consecutive confident frames before it earns credit (0 = off)
+    release_frames: int = 0  # with reach on: after this many frames of confident but unreachable readings and no completion, trust the verifier for the frame (0 = never)
 
 
 @dataclass
@@ -62,6 +63,7 @@ class Recognizer:
         self._reach_cache: dict[tuple, int | None] = {}
         self._last_top: str | None = None
         self._top_streak = 0
+        self._stuck = 0  # frames the verifier has been confident about a state the procedure cannot reach soon
         self._class_is_error = [error_component(c) is not None for c in self.classes]
         self._class_correct = [correct_of(c) for c in self.classes]
 
@@ -146,7 +148,15 @@ class Recognizer:
     def update_parts(self, state_probs: np.ndarray, state_codes: list[str], comp_err_probs: np.ndarray, frame: int, evidence: dict | None = None) -> list[dict]:
         """Feed one frame from the two-head verifier: a posterior over correct states and, per
         component, the probability that it is installed wrongly."""
-        state_probs = self.mask_to_reach(np.asarray(state_probs, dtype=np.float64), state_codes)
+        raw = np.asarray(state_probs, dtype=np.float64)
+        state_probs = self.mask_to_reach(raw, state_codes)
+        if self.config.reach > 0 and self.config.release_frames > 0:
+            if float(state_probs.max()) < self.config.min_posterior <= float(raw.max()):
+                self._stuck += 1
+            else:
+                self._stuck = 0
+            if self._stuck >= self.config.release_frames:
+                state_probs = raw  # the procedure cannot explain what the camera keeps seeing: trust the verifier
         top = int(state_probs.argmax())
         top_code = state_codes[top]
         top_p = float(state_probs[top])
@@ -290,6 +300,7 @@ class Recognizer:
         return self.events[before:]
 
     def _complete(self, step: int, evidence: dict | None) -> None:
+        self._stuck = 0
         s = self.procedure.steps[step]
         self.completed.add(step)
         self.state = self.procedure.apply(self.state, step)
