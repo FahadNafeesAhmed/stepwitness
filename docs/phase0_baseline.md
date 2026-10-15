@@ -27,13 +27,25 @@ Two substitutions were needed on this machine, both documented in `scripts/repro
 
 ## Result
 
-Filled in from `runs/phase0/baseline_table.md` once all three test archives are verified. The
-partial run on the first nine recordings (`runs/phase0_partial`) executes end to end; its numbers are
-not reported because the published figures are averages over all 32 test recordings.
+Reproduced on 2026-10-14 on all 32 test recordings (15 of them with errors), after the three test
+archives verified against their published MD5s. Every row matches the paper's Table 4 to three
+decimals, for all three baselines and both prediction sets.
 
 | Baseline | Predictions | POS all | F1 all | Delay all (s) | POS errors | F1 errors | Delay errors (s) |
 |---|---|---:|---:|---:|---:|---:|---:|
-| B3, published | real-trained | 0.797 | 0.883 | 22.4 | 0.731 | 0.816 | 20.4 |
-| B3, reproduced | real-trained | pending | | | | | |
-| B3, published | synthetic-only | 0.597 | 0.734 | 49.5 | 0.571 | 0.731 | 71.4 |
-| B3, reproduced | synthetic-only | pending | | | | | |
+| B1 (naive) | real-trained | 0.570 | 0.779 | 14.9 | 0.480 | 0.698 | 14.4 |
+| B2 (confidence) | real-trained | 0.731 | 0.860 | 22.3 | 0.636 | 0.784 | 20.2 |
+| B3 (expected) | real-trained | 0.797 | 0.883 | 22.4 | 0.731 | 0.816 | 20.4 |
+| B1 (naive) | synthetic-only | 0.014 | 0.206 | 36.9 | 0.000 | 0.174 | 48.4 |
+| B2 (confidence) | synthetic-only | 0.240 | 0.573 | 44.4 | 0.107 | 0.516 | 60.5 |
+| B3 (expected) | synthetic-only | 0.597 | 0.734 | 49.5 | 0.571 | 0.731 | 71.4 |
+
+Published B3 for comparison: real-trained 0.797 / 0.883 / 22.4 s on all, 0.731 / 0.816 / 20.4 s with
+errors; synthetic-only 0.597 / 0.734 / 49.5 s on all, 0.571 / 0.731 / 71.4 s with errors. Identical.
+
+Two things this establishes. The frame counts read from the archive listings are the counts the
+authors' code would have globbed, or the delays would have drifted. And the pure Python metric port is
+exact on real data, not only on the unit tests.
+
+The per-recording breakdown is in `runs/phase0/baseline_results.json` (not committed); the table is
+`runs/phase0/baseline_table.md`.
