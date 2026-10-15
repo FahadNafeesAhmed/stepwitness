@@ -67,10 +67,10 @@
   document.addEventListener('keydown', e => { if (e.key === 'ArrowRight') step(1); if (e.key === 'ArrowLeft') step(-1); });
 
   fetch('assets/stepper/index.json').then(r => r.ok ? r.json() : null).then(list => {
-    if (!list || !list.length) { root.hidden = true; const note = document.getElementById('stepper-note'); if (note) note.hidden = false; return; }
+    if (!list || !list.length) { const fig = document.getElementById('stepper-fig'); if (fig) fig.hidden = true; const note = document.getElementById('stepper-note'); if (note) note.hidden = false; return; }
     for (const item of list) { const o = document.createElement('option'); o.value = item.path; o.textContent = item.label; sel.appendChild(o); }
     const pick = () => fetch(sel.value + '/index.json').then(r => r.json()).then(r => { r.base = sel.value + '/'; load(r); });
     sel.addEventListener('change', pick);
     pick();
-  }).catch(() => { root.hidden = true; });
+  }).catch(() => { const fig = document.getElementById('stepper-fig'); if (fig) fig.hidden = true; const note = document.getElementById('stepper-note'); if (note) note.hidden = false; });
 })();
