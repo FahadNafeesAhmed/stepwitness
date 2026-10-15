@@ -9,15 +9,17 @@ labelled execution errors and published part geometry.
 
 ## Status
 
-No result of this project has been measured yet. Code is in place for every phase; numbers follow.
+Measured so far: the published baseline reproduces exactly (phase 0), and the verifier identifies the
+correct state on 91.6 percent of held-out renders with 54 percent single-crop error recall (phase 3,
+see docs/phase3_verifier.md). No number on real footage exists yet; that is the phase 4 run.
 
 | Phase | What | State |
 |---|---|---|
-| 0 | reproduce the published baseline from the authors' predictions | tooling ready, waiting on the test-label archives |
+| 0 | reproduce the published baseline from the authors' predictions | done, exact to three decimals on all 32 recordings (docs/phase0_baseline.md) |
 | 1 | procedure graph, LLM compiler, validation against the 22 labelled states | done, 10 tests |
-| 2 | render factory: correct states and generated errors from the CAD | done, first batch rendering |
-| 3 | verifier (frozen DINOv2, prototypes, head) and one-class localizer | code ready, training next |
-| 4 | step recognizer and the PSR evaluation bridge | done, 7 tests |
+| 2 | render factory: correct states and generated errors from the CAD | done, 13,200 renders, 144 label codes |
+| 3 | verifier (frozen DINOv2 patch grid, state + component-error heads) and one-class localizer | verifier v3 built and measured on renders; localizer training |
+| 4 | step recognizer, monitor over the 32 test recordings, PSR scores | recognizer done, 7 tests; monitor run queued behind the localizer |
 | 5 | evidence timeline and viewer | done, 3 tests |
 | 6 | edge profile (FP32, FP16, INT8 when TensorRT is available) | profiler ready |
 
@@ -71,15 +73,19 @@ python scripts/compile_procedure.py --sheet docs/instructions/industreal_assembl
 third_party/blender/blender-4.5.14-windows-x64/blender.exe -b --python tools/blender_render_dataset.py --     --fbx-dir data/industreal/part_geometries/part_geometries --out data/renders/v2 --states all --per-state 600 --error-fraction 0.5 --seed 100
 
 # 3  build the verifier and train the localizer
-python scripts/build_verifier.py --renders data/renders/v2 --out runs/phase3/verifier_v2
+python scripts/build_verifier_v3.py --renders data/renders/v2 --out runs/phase3/verifier_v3 --image-size 448 --grid 8 --epochs 30
+python scripts/build_verifier.py --renders data/renders/v2 --out runs/phase3/verifier_v2    # the earlier pooled verifier, kept for comparison
 python scripts/train_localizer.py --renders data/renders/v2 --out runs/phase3/localizer_v2 --model data/models/yolo/yolov8n.pt --epochs 20
 
 # 4  run the monitor on the test recordings and score it with the authors' metric code
-python scripts/run_monitor.py --verifier runs/phase3/verifier_v2 --localizer runs/phase3/localizer_v2/train/weights/best.pt --out runs/phase4/monitor_v2
-python scripts/evaluate_psr.py --predictions runs/phase4/monitor_v2 --out runs/phase4/monitor_v2
+python scripts/run_monitor.py --verifier runs/phase3/verifier_v3 --verifier-kind v3 --localizer runs/phase3/localizer_v2/train/weights/best.pt --out runs/phase4/monitor_v3
+python scripts/evaluate_psr.py --predictions runs/phase4/monitor_v3 --out runs/phase4/monitor_v3
+python scripts/evaluate_flags.py --events runs/phase4/monitor_v3 --out runs/phase4/monitor_v3
+# or the whole chain, one GPU job at a time, with a fallback localizer if detector training runs out of memory:
+bash scripts/pipeline_v3.sh
 
 # 5  review the evidence timeline in a browser
-python scripts/serve_timeline.py --events runs/phase4/monitor_v2
+python scripts/serve_timeline.py --events runs/phase4/monitor_v3
 
 # 6  measure the deployed cost
 python scripts/profile_edge.py --video data/industreal/videos/03_assy_0_1.mp4 --verifier runs/phase3/verifier_v2 --localizer runs/phase3/localizer_v2/train/weights/best.pt --out runs/phase6/profile_v2
