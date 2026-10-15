@@ -52,22 +52,43 @@ def extract(recs, emb, image_size, grid, jitter, seed, cache: Path) -> np.ndarra
         if x.shape == shape:
             return x
     cache.parent.mkdir(parents=True, exist_ok=True)
-    x = np.lib.format.open_memmap(cache, mode="w+", dtype=np.float16, shape=shape)
-    rng = random.Random(seed)
+    progress = cache.with_suffix(".progress")
+    start = 0
+    if cache.exists() and progress.exists():
+        try:
+            start = int(progress.read_text().strip())
+        except ValueError:
+            start = 0
+    if cache.exists() and start > 0:
+        x = np.lib.format.open_memmap(cache, mode="r+")
+        if x.shape != shape:
+            x = np.lib.format.open_memmap(cache, mode="w+", dtype=np.float16, shape=shape)
+            start = 0
+        print(f"  resuming token extraction at {start}/{len(recs)}", flush=True)
+    else:
+        x = np.lib.format.open_memmap(cache, mode="w+", dtype=np.float16, shape=shape)
+    import torch
+
     t0 = time.time()
     imgs, idx = [], []
-    for i, r in enumerate(recs):
+    for i in range(start, len(recs)):
+        r = recs[i]
         im = Image.open(r["_dir"] / "images" / r["image"])
+        # jitter is a deterministic function of the index so a resumed run reproduces the same crops
+        rng = random.Random(seed * 1000003 + i)
         box = jitter_box(rng, r["bbox_xywh"], jitter) if jitter > 0 else r["bbox_xywh"]
         imgs.append(crop_with_margin(im, box))
         idx.append(i)
         im.close()
-        if len(imgs) == 16 or i == len(recs) - 1:
-            x[idx[0] : idx[-1] + 1] = emb.embed_tokens(imgs, image_size=image_size, grid=grid)
+        if len(imgs) == 8 or i == len(recs) - 1:
+            x[idx[0] : idx[-1] + 1] = emb.embed_tokens(imgs, image_size=image_size, grid=grid, batch_size=8)
             imgs, idx = [], []
-            if (i + 1) % 1024 == 0:
+            if (i + 1) % 512 == 0 or i == len(recs) - 1:
                 x.flush()
-                print(f"  tokens {i + 1}/{len(recs)} ({(i + 1) / (time.time() - t0):.1f} img/s)", flush=True)
+                progress.write_text(str(i + 1))
+                torch.cuda.empty_cache()
+            if (i + 1) % 1024 == 0:
+                print(f"  tokens {i + 1}/{len(recs)} ({(i + 1 - start) / (time.time() - t0):.1f} img/s)", flush=True)
     x.flush()
     done_marker.write_text("ok")
     return np.load(cache, mmap_mode="r")
