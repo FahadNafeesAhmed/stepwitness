@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stepwitness: a procedure monitor from the sheet and the CAD</title>
+<meta name="description" content="A monitor that watches assembly work and flags skipped or wrong steps, built from the work instruction and the CAD files with no labelled video, scored on the IndustReal benchmark.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Roboto+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<nav class="site"><span>stepwitness</span><span><a href="https://github.com/FahadNafeesAhmed/stepwitness">github</a></span></nav>
+<main>
+
+<h1>Stepwitness: a procedure monitor from the sheet and the CAD</h1>
+<p class="byline">October 2026 · Fahad Nafees · Toronto</p>
+<div class="pills">
+  <a class="pill" href="https://github.com/FahadNafeesAhmed/stepwitness"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
+  <a class="pill" href="https://arxiv.org/abs/2310.17323">IndustReal benchmark</a>
+  <span class="pill" id="status-pill">Status: build in progress, first numbers pending</span>
+</div>
+
+<p class="lead">Factories want a camera that watches a worker do a job, confirms each step was done properly, and flags a step that was skipped or done wrong. Building that today means months of filming and hand-labelling video for every new job, then starting over for the next one. We wanted to see how far you can get with only two things every factory already has before any video exists: the written work instruction and the CAD files of the parts.</p>
+
+<figure class="card" id="stepper-fig">
+  <div class="stepper" id="stepper">
+    <div class="frame"><img alt="A frame from a test recording with the monitor's evidence drawn on it"><div class="box"></div><div class="hud">loading…</div></div>
+    <div class="bar"><div class="cursor"></div></div>
+    <div class="controls">
+      <button type="button" data-step="-1" aria-label="previous frame">‹</button>
+      <button type="button" data-play aria-label="play">▶</button>
+      <button type="button" data-step="1" aria-label="next frame">›</button>
+      <span class="status"></span>
+      <select aria-label="recording"></select>
+    </div>
+    <div class="events"></div>
+  </div>
+  <figcaption>Step through a real test recording. Green ticks are step completions the monitor recognised, red ticks are flags. The box is the localizer, the label is the verifier's current reading. Nothing in this view was hand-labelled. Arrow keys work.</figcaption>
+</figure>
+<p id="stepper-note" class="pending" hidden>The frame stepper appears here once the monitor has run on the test recordings. Until then the clip below shows what the model is trained on.</p>
+
+<figure class="card">
+  <video src="assets/videos/renders.mp4" controls muted loop playsinline preload="metadata"></video>
+  <figcaption>140 of the training renders. Every one is drawn from the CAD; the red labels mark the error renders and which component is wrong. No real frame is in the training set.</figcaption>
+</figure>
+
+<h2>Why did we start this?</h2>
+<p>The current industrial-vision startups pitch "describe the task, give a few examples, get a production monitor in minutes." The hardest version of that claim is the zero-example one: no labelled video at all. There is exactly one public benchmark where it can be tested honestly. <a href="https://arxiv.org/abs/2310.17323">IndustReal</a> is 84 head-camera recordings of 27 people assembling a construction-toy car, with 38 real execution errors, and the authors published the CAD of every part, their code, their predictions and their scores.</p>
+<p>Their own conclusion names two open problems: the baseline "fails to generalize to out-of-distribution execution errors," and sim-to-real training is "crucial to scalability." Those two sentences are the whole project.</p>
+
+<div class="callout">
+<p><strong>The idea in three sentences.</strong> A completed step is a change in how the assembly looks, and with the CAD you can draw every "after" from any angle in any light, thousands of times, for free. A vision foundation model already knows how to see shapes, so you freeze it and teach only a small layer the difference between pin in and pin out. The instruction sheet is a rulebook, so if the camera sees step 4 while step 2 was never seen, something was skipped.</p>
+</div>
+<p>The one new move is to draw the mistakes as well. The published system learned only correct states, so a wrong pin was accepted as correct. Rendering the wrong states from the same CAD is the direct fix.</p>
+
+<h2>What goes in, what comes out</h2>
+<div class="tbl"><table>
+<thead><tr><th>Setup inputs, once per job</th><th>Runtime outputs, every frame</th></tr></thead>
+<tbody>
+<tr><td>The work instruction as plain text</td><td>Step completion events with timestamp, confidence and a frame link</td></tr>
+<tr><td>The part geometry as CAD files</td><td>Step durations, cycle time, idle and interruption spans</td></tr>
+<tr><td>Optionally one to five real photos per state. The headline run uses zero.</td><td>Flags for omission, wrong order and execution error, each linked to the frame and the instruction line</td></tr>
+<tr><td></td><td>Nothing acted on automatically. Evidence for a person to review.</td></tr>
+</tbody></table></div>
+
+<h2>How it is put together</h2>
+<p>Two lanes. The setup lane runs once per job and produces a procedure graph and a verifier. The runtime lane runs on every frame and produces the timeline.</p>
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1300 620" role="img" aria-labelledby="dgt">
+<title id="dgt">Stepwitness architecture: setup lane and runtime lane</title>
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="svg-head"></path></marker>
+<marker id="ahb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="svg-headb"></path></marker>
+</defs>
+<rect x="10" y="10" width="1280" height="300" class="svg-lane"></rect>
+<text x="26" y="36" class="svg-m">SETUP · ONCE PER JOB</text>
+<rect x="10" y="330" width="1280" height="280" class="svg-lane"></rect>
+<text x="26" y="356" class="svg-m">RUNTIME · EVERY FRAME · RUNS AS THE EDGE PACKAGE ON SITE HARDWARE</text>
+<rect x="24" y="60" width="190" height="54" class="svg-box"></rect><text x="36" y="82" class="svg-t">Part geometry</text><text x="36" y="100" class="svg-s">CAD files, FBX or 3MF</text>
+<rect x="24" y="130" width="190" height="54" class="svg-box"></rect><text x="36" y="152" class="svg-t">Work instruction</text><text x="36" y="170" class="svg-s">plain text, the job's sheet</text>
+<rect x="270" y="60" width="240" height="86" class="svg-box"></rect><text x="282" y="82" class="svg-t"><tspan class="svg-lab">2</tspan>  Render factory</text><text x="282" y="100" class="svg-s">Blender; random light, camera, hands</text><text x="282" y="116" class="svg-s">22 correct + generated error states</text><text x="282" y="134" class="svg-s">→ labelled renders</text>
+<rect x="580" y="60" width="240" height="86" class="svg-box"></rect><text x="592" y="82" class="svg-t"><tspan class="svg-lab">3</tspan>  State verifier (train)</text><text x="592" y="100" class="svg-s">frozen vision foundation model</text><text x="592" y="116" class="svg-s">prototype bank per state + small head</text><text x="592" y="134" class="svg-s">optional: 1 to 5 real photos per state</text>
+<rect x="880" y="60" width="200" height="86" class="svg-box"></rect><text x="892" y="82" class="svg-t"><tspan class="svg-lab">6</tspan>  Edge package</text><text x="892" y="100" class="svg-s">ONNX → INT8</text><text x="892" y="116" class="svg-s">profile.json, rollback</text><text x="892" y="134" class="svg-s">→ deployable package</text>
+<rect x="1130" y="60" width="156" height="86" class="svg-box"></rect><text x="1142" y="82" class="svg-t"><tspan class="svg-lab">1</tspan>  Procedure</text><text x="1142" y="98" class="svg-t">compiler</text><text x="1142" y="116" class="svg-s">LLM draft, one review</text><text x="1142" y="134" class="svg-s">→ procedure graph</text>
+<polyline points="214,87 242,87 242,103 270,103" class="svg-arrow"></polyline>
+<polyline points="214,157 1105,157 1105,103 1130,103" class="svg-arrow"></polyline><text x="640" y="152" class="svg-s">instruction text</text>
+<polyline points="510,103 580,103" class="svg-arrow"></polyline><text x="520" y="96" class="svg-s">renders</text>
+<polyline points="820,103 880,103" class="svg-arrow"></polyline><text x="828" y="96" class="svg-s">weights</text>
+<polyline points="980,146 980,328" class="svg-dash"></polyline><text x="990" y="250" class="svg-lab">deploy</text>
+<polyline points="1208,146 1208,290 1030,290 1030,398" class="svg-dash"></polyline><text x="1040" y="284" class="svg-lab">procedure graph</text>
+<rect x="24" y="400" width="140" height="86" class="svg-box"></rect><text x="36" y="422" class="svg-t">Camera or video</text><text x="36" y="440" class="svg-s">720p RGB, 10 fps</text>
+<rect x="204" y="400" width="306" height="86" class="svg-box"></rect><text x="216" y="422" class="svg-t">Localize assembly</text><text x="216" y="440" class="svg-s">one-class detector trained on renders</text><text x="216" y="456" class="svg-s">finds the box, nothing else</text><text x="216" y="474" class="svg-s">→ crop</text>
+<rect x="580" y="400" width="240" height="86" class="svg-box"></rect><text x="592" y="422" class="svg-t"><tspan class="svg-lab">3</tspan>  State verifier (run)</text><text x="592" y="440" class="svg-s">crop embedding vs prototype bank</text><text x="592" y="456" class="svg-s">error-template contrast per step</text><text x="592" y="474" class="svg-s">→ state · error · unknown, per frame</text>
+<rect x="880" y="400" width="200" height="86" class="svg-box"></rect><text x="892" y="422" class="svg-t"><tspan class="svg-lab">4</tspan>  Step recognizer</text><text x="892" y="440" class="svg-s">windowed confidence</text><text x="892" y="456" class="svg-s">partial-order allowed set</text><text x="892" y="474" class="svg-s">→ completions, flags</text>
+<rect x="1130" y="400" width="156" height="86" class="svg-box"></rect><text x="1142" y="422" class="svg-t"><tspan class="svg-lab">5</tspan>  Evidence</text><text x="1142" y="438" class="svg-t">timeline</text><text x="1142" y="456" class="svg-s">events and flags with</text><text x="1142" y="472" class="svg-s">frame and line links</text>
+<rect x="580" y="524" width="240" height="60" class="svg-opt"></rect><text x="592" y="546" class="svg-t"><tspan class="svg-lab">7</tspan>  Optional VLM check</text><text x="592" y="564" class="svg-s">yes/no with crop and line; evidence only</text>
+<polyline points="700,486 700,522" class="svg-dash"></polyline><text x="708" y="508" class="svg-s">low confidence only</text>
+<polyline points="164,443 204,443" class="svg-arrow"></polyline><polyline points="510,443 580,443" class="svg-arrow"></polyline><polyline points="820,443 880,443" class="svg-arrow"></polyline><polyline points="1080,443 1130,443" class="svg-arrow"></polyline>
+</svg>
+</div>
+<div class="legend"><span>data flow</span><span class="dash">produced in setup, used at runtime</span><span class="opt">optional, off the headline numbers</span></div>
+<figcaption>Setup runs once per job; runtime runs on every frame. Component 3 is trained once and then run on every crop.</figcaption>
+</figure>
+
+<h2>The pieces, one at a time</h2>
+
+<h3><span class="step-n">1</span>Procedure compiler</h3>
+<p>A language model reads the instruction text and writes one record per step: the component it moves, install or remove, the lines that must be done first, and a subgoal name. Step ids are computed in code from the component index, so a wrong id is impossible. The preconditions form a partial order, not a fixed sequence, which is how the dataset's 48 valid build orders are expressed without listing them. A person reviews the graph once.</p>
+<p>Then a check walks every path through the graph and confirms that every state it can reach is one of the 22 states the dataset labelled. This caught the model's first drafts: it under-constrained the bracket, and the graph reached ten states the dataset never allows. The validator rejected them without anyone reading the draft.</p>
+
+<h3><span class="step-n">2</span>Render factory</h3>
+<p>Blender loads a state file, separates it into its physical parts, and classifies each part by colour and size: wheel, pin, clip, brace, plate, block, knob. Each scene is then rendered many times with everything randomized that a camera would see vary on a real line: light direction and strength, table texture, camera position on a hemisphere at head-camera angles, lens field of view, hand-shaped occluders, and copies of the real parts scattered on the table as distractors. Labels are free because the renderer knows where every part is.</p>
+<figure class="card">
+  <img src="assets/img/classify_state13.jpg" alt="The complete car with every part coloured by its class">
+  <figcaption>The complete model with every loose part coloured by the class the geometry rule gave it: wheels, pins (green), clips, braces, plates, blocks, the knob. The component each part belongs to follows from the car's layout.</figcaption>
+</figure>
+<p>Error states are made by editing parts inside the file: a pin pulled part-way out, a clip removed, a pin turned across, a wrong-length pin, a wheel without its nuts, braces slid or tilted. The label is the state code with a −1 at that component, the dataset's own convention for an incorrectly installed part.</p>
+<figure class="card">
+  <img src="assets/img/error_sheet.jpg" alt="A sheet of renders with error labels and localizer boxes">
+  <figcaption>A test sheet from the renderer. Each tile's label names the state and, for error renders, the component and the kind of error. Green boxes are the ground-truth boxes the localizer learns from.</figcaption>
+</figure>
+<div class="grid2">
+  <figure class="card"><img src="assets/img/real_03_assy_0_1_60.jpg" alt="A real frame from the dataset"><figcaption>A real frame from a test recording: white desk, loose parts, hands, an instruction sheet.</figcaption></figure>
+  <figure class="card"><img src="assets/img/render_grid.jpg" alt="Six training renders"><figcaption>Six training renders after matching the materials to the real footage: matte grey pins, bright magenta, white PLA, black wheels.</figcaption></figure>
+</div>
+<div class="callout">
+<p><strong>Two approaches tried and dropped.</strong> Mapping parts across the 22 files by matching geometry failed: each file is exported at its own level of detail, and the complete model is built differently at the front end from the early-state files. We rebuilt every state that way and rendered it next to the dataset's own file, and the pairs did not match, so the per-file classifier replaced it.</p>
+</div>
+<figure class="card">
+  <img src="assets/img/derive_sheet.jpg" alt="Twenty-two pairs of renders: rebuilt state on the left, dataset file on the right" loading="lazy">
+  <figcaption>The rejection evidence: each state rebuilt from the complete model (left) beside the dataset's own file (right). States 1 to 12 do not match. Keeping the failed test is part of the method.</figcaption>
+</figure>
+
+<h3><span class="step-n">3</span>State verifier</h3>
+<dl class="kv">
+<dt>Input</dt><dd>A crop of the assembly from one frame.</dd>
+<dt>How</dt><dd>A frozen DINOv2 backbone embeds the crop. The embedding is matched against a prototype bank built from the renders of every correct and error state, about sixteen centroids per state so viewpoint variation is covered. A small head trained on renders refines the result. When a step is about to be declared complete, the crop is compared against the expected correct state and the error states of that one component; if an error wins by a margin for several frames, the step stays open and an <span class="flag">execution error</span> is raised.</dd>
+<dt>Why</dt><dd>This attacks the two failures the benchmark authors published: a wrong pin accepted as correct, and a missing wheel that stalled every later recognition.</dd>
+</dl>
+
+<h3><span class="step-n">4</span>Step recognizer</h3>
+<p>This keeps the accumulate-and-decay core of the published baseline, because that core works and keeping it keeps the numbers comparable. Each frame the most likely state suggests which steps would take the current state there; those steps gain the frame's confidence, everything else decays, and a step completes when its total crosses a threshold. Three things change. The allowed set comes from the graph and moves after every completion. Steps whose preconditions are visibly absent raise an omission flag instead of completing. And an error verdict holds the step open. Parts that appear together, a chassis and its pin, complete together, because that is what the camera saw.</p>
+
+<h3><span class="step-n">5</span>Evidence timeline</h3>
+<p>Every event is a record with a type, the step, the instruction line, the frame, and the evidence: the box, the top state, the similarities. A small service serves the records and a page that seeks the video to the frame and shows the instruction line beside it. Durations, cycle time and idle spans are arithmetic over the events. Nothing is acted on.</p>
+
+<h3><span class="step-n">6</span>Edge package</h3>
+<p>The localizer and the backbone are exported and timed at FP32 and FP16 on the development GPU, with p50 and p95 latency, throughput, peak memory, and power sampled from the driver ten times a second. INT8 through TensorRT follows once that package is installed. The profile file is written by the profiler, never by hand.</p>
+
+<h2>The state code</h2>
+<p>The benchmark describes the assembly with eleven components in a fixed order; each digit says whether that component is correctly installed. <code>1</code> is installed, <code>0</code> not yet, <code>-1</code> installed wrongly. So <code>11100000000</code> is base, front chassis and front chassis pin done. The graph, the renders and the verifier all speak this code, which is why a completion is just a change in one digit.</p>
+<div class="tbl"><table>
+<thead><tr><th class="num">Pos.</th><th>Component</th><th class="num">Pos.</th><th>Component</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td>base</td><td class="num">7</td><td>rear-rear chassis pin</td></tr>
+<tr><td class="num">2</td><td>front chassis</td><td class="num">8</td><td>front bracket</td></tr>
+<tr><td class="num">3</td><td>front chassis pin</td><td class="num">9</td><td>front bracket screw</td></tr>
+<tr><td class="num">4</td><td>rear chassis</td><td class="num">10</td><td>front wheel assembly</td></tr>
+<tr><td class="num">5</td><td>short rear chassis</td><td class="num">11</td><td>rear wheel assembly</td></tr>
+<tr><td class="num">6</td><td>front-rear chassis pin</td><td></td><td></td></tr>
+</tbody></table></div>
+
+<h2>How it is scored, and the first result</h2>
+<p>With the authors' own metric code, unchanged. Procedure order similarity compares the predicted completion order with the true one as two strings, where a swap of neighbours costs little and a wrong step costs as much as a delete plus an insert. F1 counts a completion as correct only if it comes at or after the real completion. Delay is the average time between a true completion and the system noticing it.</p>
+<p>Before measuring anything of ours, we reproduced theirs. The authors published their detector's predictions on the test split; replaying them through their recognizer and metric on this machine gives every row of their Table 4 to three decimals, on all 32 test recordings:</p>
+<div class="tbl"><table>
+<thead><tr><th>Baseline</th><th>Trained on</th><th class="num">POS all</th><th class="num">F1 all</th><th class="num">Delay</th><th class="num">POS errors</th><th class="num">F1 errors</th></tr></thead>
+<tbody>
+<tr><td>B1 naive</td><td>real video</td><td class="num">0.570</td><td class="num">0.779</td><td class="num">14.9 s</td><td class="num">0.480</td><td class="num">0.698</td></tr>
+<tr><td>B2 confidence</td><td>real video</td><td class="num">0.731</td><td class="num">0.860</td><td class="num">22.3 s</td><td class="num">0.636</td><td class="num">0.784</td></tr>
+<tr><td><strong>B3 expected</strong></td><td>real video</td><td class="num">0.797</td><td class="num">0.883</td><td class="num">22.4 s</td><td class="num">0.731</td><td class="num">0.816</td></tr>
+<tr><td><strong>B3 expected</strong></td><td>synthetic only</td><td class="num">0.597</td><td class="num">0.734</td><td class="num">49.5 s</td><td class="num">0.571</td><td class="num">0.731</td></tr>
+<tr id="ours-row"><td><strong>Stepwitness</strong></td><td>renders only</td><td class="num pending" colspan="5">pending the first full run</td></tr>
+</tbody></table></div>
+<p class="muted">Results are reported as measured, including the ones that fall short, with the frames that broke it.</p>
+
+<h2>Where it stands</h2>
+<div class="tbl"><table id="status-table">
+<thead><tr><th>Phase</th><th>What</th><th>State</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>reproduce the published baseline from the authors' predictions</td><td class="ok">done, exact to three decimals on all 32 recordings</td></tr>
+<tr><td>1</td><td>procedure graph, compiler, validation against the 22 labelled states</td><td class="ok">done, 10 tests</td></tr>
+<tr><td>2</td><td>render factory with generated errors</td><td class="ok">done, 13,200 renders</td></tr>
+<tr><td>3</td><td>verifier and localizer trained on renders</td><td>running</td></tr>
+<tr><td>4</td><td>monitor over the 32 test recordings, scored with the authors' code</td><td>queued</td></tr>
+<tr><td>5</td><td>evidence timeline and viewer</td><td class="ok">done, 3 tests</td></tr>
+<tr><td>6</td><td>edge profile</td><td>profiler ready</td></tr>
+</tbody></table></div>
+
+<h2>What we learned the hard way</h2>
+<ol class="fn">
+<li>A local language model holding 5 GB of the 8 GB graphics card made the renderer's shaders fail to compile. The error said nothing about memory. Unloading the model fixed it.</li>
+<li>The ray-tracing kernels of the renderer fail to load on this driver; the CUDA path works.</li>
+<li>Blender resolves a relative output path against the drive root, not the working directory. The first renders landed in <code>C:\data</code>.</li>
+<li>The camera's matrix is stale until the view layer updates; half the samples were silently skipped as "out of frame" before that one line was added.</li>
+<li>Upgrading the detector library pulled a CPU-only torch into the environment and hid the CUDA build.</li>
+<li>The archive server refuses parallel downloads; four parallel transfers corrupted each other's files and had to be redone.</li>
+<li>Both render batches died at state 15 on the same line: the wheel-loose error edit assumed an axle part had been classified, and that file has none.</li>
+</ol>
+
+<h2>References</h2>
+<ol class="fn">
+<li>Schoonbeek, Houben, Onvlee, de With, van der Sommen. IndustReal: A Dataset for Procedure Step Recognition Handling Execution Errors in Egocentric Videos in an Industrial-Like Setting. WACV 2024. <a href="https://arxiv.org/abs/2310.17323">arxiv.org/abs/2310.17323</a></li>
+<li>IndustReal code, weights and predictions. <a href="https://github.com/TimSchoonbeek/IndustReal">github.com/TimSchoonbeek/IndustReal</a></li>
+<li>Schoonbeek et al. Supervised Representation Learning towards Generalizable Assembly State Recognition. RA-L 2024. <a href="https://arxiv.org/abs/2408.11700">arxiv.org/abs/2408.11700</a></li>
+<li>Huang et al. Modeling Multiple Normal Action Representations for Error Detection in Procedural Tasks. 2025. <a href="https://arxiv.org/abs/2503.22405">arxiv.org/abs/2503.22405</a></li>
+<li>Bacharidis, Argyros. Vision-Based Mistake Analysis in Procedural Activities: A Review. 2025. <a href="https://arxiv.org/abs/2510.19292">arxiv.org/abs/2510.19292</a></li>
+</ol>
+
+</main>
+<footer class="foot">Stepwitness · Fahad Nafees · October 2026 · Built with an AI coding agent under the author's direction; design, decisions and measurements are the author's. The dataset is IndustReal (Schoonbeek et al.), used under its licence.</footer>
+<script src="app.js" defer></script>
+</body>
+</html>

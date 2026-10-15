@@ -1,0 +1,38 @@
+[
+ {
+  "image": "s10_ok_100_0077.jpg",
+  "state": "11110111110",
+  "error_component": null,
+  "error_kind": null
+ },
+ {
+  "image": "s08_ok_100_0338.jpg",
+  "state": "11110110000",
+  "error_component": null,
+  "error_kind": null
+ },
+ {
+  "image": "s10_ok_100_0207.jpg",
+  "state": "11110111110",
+  "error_component": null,
+  "error_kind": null
+ },
+ {
+  "image": "s13_err_100_0167.jpg",
+  "state": "11110111111",
+  "error_component": 6,
+  "error_kind": "pin_rotated"
+ },
+ {
+  "image": "s08_err_100_0086.jpg",
+  "state": "11110110000",
+  "error_component": 2,
+  "error_kind": "pin_rotated"
+ },
+ {
+  "image": "s08_err_100_0126.jpg",
+  "state": "11110110000",
+  "error_component": 1,
+  "error_kind": "plate_shifted"
+ }
+]
