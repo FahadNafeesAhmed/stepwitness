@@ -41,27 +41,36 @@ def jitter_box(rng, box, amount):
 
 
 def extract(recs, emb, image_size, grid, jitter, seed, cache: Path) -> np.ndarray:
-    if cache.exists():
-        z = np.load(cache)
-        if len(z["x"]) == len(recs) and z["x"].shape[1] == 1 + grid * grid:
-            return z["x"]
+    """Tokens for every render, written straight into a memory-mapped .npy so the process never holds
+    the whole set in RAM (this machine has little to spare). Resumes from a partial file."""
+    cache = cache.with_suffix(".npy")
+    done_marker = cache.with_suffix(".done")
+    dim = emb.model.config.hidden_size
+    shape = (len(recs), 1 + grid * grid, dim)
+    if cache.exists() and done_marker.exists():
+        x = np.load(cache, mmap_mode="r")
+        if x.shape == shape:
+            return x
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    x = np.lib.format.open_memmap(cache, mode="w+", dtype=np.float16, shape=shape)
     rng = random.Random(seed)
-    out = []
     t0 = time.time()
-    imgs = []
+    imgs, idx = [], []
     for i, r in enumerate(recs):
         im = Image.open(r["_dir"] / "images" / r["image"])
         box = jitter_box(rng, r["bbox_xywh"], jitter) if jitter > 0 else r["bbox_xywh"]
         imgs.append(crop_with_margin(im, box))
-        if len(imgs) == 32 or i == len(recs) - 1:
-            out.append(emb.embed_tokens(imgs, image_size=image_size, grid=grid))
-            imgs = []
+        idx.append(i)
+        im.close()
+        if len(imgs) == 16 or i == len(recs) - 1:
+            x[idx[0] : idx[-1] + 1] = emb.embed_tokens(imgs, image_size=image_size, grid=grid)
+            imgs, idx = [], []
             if (i + 1) % 1024 == 0:
-                print(f"  tokens {i + 1}/{len(recs)} ({(i + 1) / (time.time() - t0):.1f} img/s)")
-    x = np.concatenate(out, axis=0)
-    cache.parent.mkdir(parents=True, exist_ok=True)
-    np.savez(cache, x=x)
-    return x
+                x.flush()
+                print(f"  tokens {i + 1}/{len(recs)} ({(i + 1) / (time.time() - t0):.1f} img/s)", flush=True)
+    x.flush()
+    done_marker.write_text("ok")
+    return np.load(cache, mmap_mode="r")
 
 
 def main() -> None:
@@ -87,11 +96,17 @@ def main() -> None:
     val_mask = np.array([rng.random() < args.val_fraction for _ in recs])
     emb = Embedder(args.model)
     x = extract(recs, emb, args.image_size, args.grid, args.jitter, args.seed, args.out / f"tokens_{args.image_size}_{args.grid}.npz")
-    x_tr, x_va = x[~val_mask], x[val_mask]
-    c_tr = [c for c, m in zip(codes, val_mask) if not m]
-    c_va = [c for c, m in zip(codes, val_mask) if m]
-    print(f"train {len(c_tr)}, val {len(c_va)}, token shape {x.shape[1:]}")
-    head, info = train_v3(x_tr, c_tr, epochs=args.epochs, seed=args.seed, val=(x_va, c_va))
+    del emb  # free the backbone before training; the head only needs the tokens
+    import torch
+
+    torch.cuda.empty_cache()
+    tr_idx = np.where(~val_mask)[0]
+    va_idx = np.where(val_mask)[0]
+    x_va = np.ascontiguousarray(x[va_idx])  # small enough to hold
+    c_tr = [codes[i] for i in tr_idx]
+    c_va = [codes[i] for i in va_idx]
+    print(f"train {len(c_tr)}, val {len(c_va)}, token shape {x.shape[1:]}", flush=True)
+    head, info = train_v3(x[tr_idx], c_tr, epochs=args.epochs, seed=args.seed, val=(x_va, c_va))
     final = evaluate_v3(head, x_va, c_va)
     print("final:", json.dumps(final, indent=1))
     v = MultiTaskVerifier(head, args.image_size, args.grid)

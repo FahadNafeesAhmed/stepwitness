@@ -46,6 +46,15 @@ class AttnPoolHead(nn.Module):
         return self.state_out(feat), self.err_out(feat)
 
 
+def to_device_chunked(tokens: np.ndarray, device: str, chunk: int = 512) -> torch.Tensor:
+    """Copy a (possibly memory-mapped) token array to the device a chunk at a time, so no full-size
+    copy is ever made in RAM."""
+    out = torch.empty(tuple(tokens.shape), dtype=torch.float16, device=device)
+    for i in range(0, len(tokens), chunk):
+        out[i : i + chunk] = torch.from_numpy(np.ascontiguousarray(tokens[i : i + chunk])).to(device)
+    return out
+
+
 def labels_from_codes(codes: list[str]) -> tuple[np.ndarray, np.ndarray]:
     idx = {c: i for i, c in enumerate(STATE_CODES)}
     y_state = np.array([idx[correct_of(c)] for c in codes], dtype=np.int64)
@@ -70,7 +79,7 @@ def train_v3(
 ) -> tuple[AttnPoolHead, dict]:
     torch.manual_seed(seed)
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-    x = torch.tensor(tokens, dtype=torch.float16, device=device)
+    x = to_device_chunked(tokens, device)
     y_state, y_err = labels_from_codes(codes)
     ys = torch.tensor(y_state, device=device)
     ye = torch.tensor(y_err, device=device)
@@ -110,7 +119,7 @@ def predict_v3(head: AttnPoolHead, tokens: np.ndarray, device=None, batch: int =
     head.eval()
     ps, pe = [], []
     for i in range(0, len(tokens), batch):
-        xb = torch.tensor(tokens[i : i + batch], dtype=torch.float16, device=device).float()
+        xb = torch.from_numpy(np.ascontiguousarray(tokens[i : i + batch])).to(device).float()
         ls, le = head(xb)
         ps.append(torch.softmax(ls, dim=1).cpu().numpy())
         pe.append(torch.sigmoid(le).cpu().numpy())
