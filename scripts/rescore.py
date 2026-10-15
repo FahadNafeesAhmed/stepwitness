@@ -51,6 +51,9 @@ def replay(npz: Path, config: RecognizerConfig, out: Path, proc_info: dict) -> d
     (out / f"{name}.events.json").write_text(json.dumps(rec.events, indent=1))
     yhat = rec.y_hat(proc_info)
     (out / f"{name}.yhat.json").write_text(json.dumps(yhat, indent=1))
+    trace = npz.with_name(f"{name}.trace.json")  # per-frame boxes and readings, so clips and the stepper can be made from this replay
+    if trace.exists():
+        (out / trace.name).write_bytes(trace.read_bytes())
     return {"recording": name, "completions": len(yhat), "flags": sum(1 for e in rec.events if e["type"] in ("omission", "execution_error") and not e.get("at_end"))}
 
 
