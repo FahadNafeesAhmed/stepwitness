@@ -44,6 +44,19 @@ git clone https://github.com/TimSchoonbeek/IndustReal third_party/IndustReal
 
 Torch, torchvision and OpenCV come from the system Python on the development machine.
 
+## The site
+
+`site/` is a static page in the style of a long-form write-up, with the architecture, the figures,
+a frame stepper over real test recordings, and the clips. Deploy on Vercel by importing the repo:
+`vercel.json` points the deployment at `site/` with no build step. Locally:
+
+```
+python -m http.server 8787 --directory site
+```
+
+Clips and stepper data are produced by `scripts/make_videos.py` and `tools/export_stepper.py` from
+the monitor's event files.
+
 ## Running each phase
 
 ```
