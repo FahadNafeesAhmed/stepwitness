@@ -82,7 +82,7 @@
 <rect x="24" y="60" width="190" height="54" class="svg-box"></rect><text x="36" y="82" class="svg-t">Part geometry</text><text x="36" y="100" class="svg-s">CAD files, FBX or 3MF</text>
 <rect x="24" y="130" width="190" height="54" class="svg-box"></rect><text x="36" y="152" class="svg-t">Work instruction</text><text x="36" y="170" class="svg-s">plain text, the job's sheet</text>
 <rect x="270" y="60" width="240" height="86" class="svg-box"></rect><text x="282" y="82" class="svg-t"><tspan class="svg-lab">2</tspan>  Render factory</text><text x="282" y="100" class="svg-s">Blender; random light, camera, hands</text><text x="282" y="116" class="svg-s">22 correct + generated error states</text><text x="282" y="134" class="svg-s">→ labelled renders</text>
-<rect x="580" y="60" width="240" height="86" class="svg-box"></rect><text x="592" y="82" class="svg-t"><tspan class="svg-lab">3</tspan>  State verifier (train)</text><text x="592" y="100" class="svg-s">frozen vision foundation model</text><text x="592" y="116" class="svg-s">prototype bank per state + small head</text><text x="592" y="134" class="svg-s">optional: 1 to 5 real photos per state</text>
+<rect x="580" y="60" width="240" height="86" class="svg-box"></rect><text x="592" y="82" class="svg-t"><tspan class="svg-lab">3</tspan>  State verifier (train)</text><text x="592" y="100" class="svg-s">frozen vision foundation model, 448 px</text><text x="592" y="116" class="svg-s">patch grid + attention-pool head</text><text x="592" y="134" class="svg-s">22 states, 11 component-error outputs</text>
 <rect x="880" y="60" width="200" height="86" class="svg-box"></rect><text x="892" y="82" class="svg-t"><tspan class="svg-lab">6</tspan>  Edge package</text><text x="892" y="100" class="svg-s">ONNX → INT8</text><text x="892" y="116" class="svg-s">profile.json, rollback</text><text x="892" y="134" class="svg-s">→ deployable package</text>
 <rect x="1130" y="60" width="156" height="86" class="svg-box"></rect><text x="1142" y="82" class="svg-t"><tspan class="svg-lab">1</tspan>  Procedure</text><text x="1142" y="98" class="svg-t">compiler</text><text x="1142" y="116" class="svg-s">LLM draft, one review</text><text x="1142" y="134" class="svg-s">→ procedure graph</text>
 <polyline points="214,87 242,87 242,103 270,103" class="svg-arrow"></polyline>
@@ -93,7 +93,7 @@
 <polyline points="1208,146 1208,290 1030,290 1030,398" class="svg-dash"></polyline><text x="1040" y="284" class="svg-lab">procedure graph</text>
 <rect x="24" y="400" width="140" height="86" class="svg-box"></rect><text x="36" y="422" class="svg-t">Camera or video</text><text x="36" y="440" class="svg-s">720p RGB, 10 fps</text>
 <rect x="204" y="400" width="306" height="86" class="svg-box"></rect><text x="216" y="422" class="svg-t">Localize assembly</text><text x="216" y="440" class="svg-s">one-class detector trained on renders</text><text x="216" y="456" class="svg-s">finds the box, nothing else</text><text x="216" y="474" class="svg-s">→ crop</text>
-<rect x="580" y="400" width="240" height="86" class="svg-box"></rect><text x="592" y="422" class="svg-t"><tspan class="svg-lab">3</tspan>  State verifier (run)</text><text x="592" y="440" class="svg-s">crop embedding vs prototype bank</text><text x="592" y="456" class="svg-s">error-template contrast per step</text><text x="592" y="474" class="svg-s">→ state · error · unknown, per frame</text>
+<rect x="580" y="400" width="240" height="86" class="svg-box"></rect><text x="592" y="422" class="svg-t"><tspan class="svg-lab">3</tspan>  State verifier (run)</text><text x="592" y="440" class="svg-s">state posterior over the 22 states</text><text x="592" y="456" class="svg-s">error probability per component</text><text x="592" y="474" class="svg-s">→ state · error · unknown, per frame</text>
 <rect x="880" y="400" width="200" height="86" class="svg-box"></rect><text x="892" y="422" class="svg-t"><tspan class="svg-lab">4</tspan>  Step recognizer</text><text x="892" y="440" class="svg-s">windowed confidence</text><text x="892" y="456" class="svg-s">partial-order allowed set</text><text x="892" y="474" class="svg-s">→ completions, flags</text>
 <rect x="1130" y="400" width="156" height="86" class="svg-box"></rect><text x="1142" y="422" class="svg-t"><tspan class="svg-lab">5</tspan>  Evidence</text><text x="1142" y="438" class="svg-t">timeline</text><text x="1142" y="456" class="svg-s">events and flags with</text><text x="1142" y="472" class="svg-s">frame and line links</text>
 <rect x="580" y="524" width="240" height="60" class="svg-opt"></rect><text x="592" y="546" class="svg-t"><tspan class="svg-lab">7</tspan>  Optional VLM check</text><text x="592" y="564" class="svg-s">yes/no with crop and line; evidence only</text>
@@ -137,9 +137,21 @@
 <h3><span class="step-n">3</span>State verifier</h3>
 <dl class="kv">
 <dt>Input</dt><dd>A crop of the assembly from one frame.</dd>
-<dt>How</dt><dd>A frozen DINOv2 backbone embeds the crop. The embedding is matched against a prototype bank built from the renders of every correct and error state, about sixteen centroids per state so viewpoint variation is covered. A small head trained on renders refines the result. When a step is about to be declared complete, the crop is compared against the expected correct state and the error states of that one component; if an error wins by a margin for several frames, the step stays open and an <span class="flag">execution error</span> is raised.</dd>
+<dt>How</dt><dd>A frozen DINOv2 backbone reads the crop at 448 pixels. Its patch tokens are kept as an 8 by 8 grid rather than pooled into one vector, so the few patches that show a 3 mm clip can still decide the answer. A small attention-pooling head, trained on renders only, gives two outputs: which of the 22 correct states this is, and for each of the eleven components the probability that it is installed wrongly. The recognizer uses both: the state posterior drives step completion, and a component whose error probability stays high for several frames holds its step open and raises an <span class="flag">execution error</span>.</dd>
 <dt>Why</dt><dd>This attacks the two failures the benchmark authors published: a wrong pin accepted as correct, and a missing wheel that stalled every later recognition.</dd>
 </dl>
+<p>The first verifier pooled the whole crop into one vector at 224 pixels and learned 144 classes. It found the correct state six times in ten and almost never named an error: a 3 mm clip is four pixels wide at that size and gone after pooling. Version 3 is the design above. Both are measured on the same 2,640 held-out renders, new views of the same objects, so these numbers say how well the head learned the renders, not how it does on real footage. That number comes from the monitor run below.</p>
+<div class="tbl"><table>
+<thead><tr><th>On held-out renders</th><th class="num">v2: pooled, 224 px</th><th class="num">v3: patch grid, 448 px</th></tr></thead>
+<tbody>
+<tr><td>correct state identified</td><td class="num">0.623</td><td class="num">0.916</td></tr>
+<tr><td>exact label, state and every error digit</td><td class="num">0.383</td><td class="num">0.625</td></tr>
+<tr><td>a crop with an error is flagged (recall)</td><td class="num">0.110</td><td class="num">0.541</td></tr>
+<tr><td>a flagged crop really has an error (precision)</td><td class="num">0.865</td><td class="num">0.773</td></tr>
+<tr><td>a correct crop is wrongly flagged</td><td class="num">0.015</td><td class="num">0.138</td></tr>
+<tr><td>the wrong component is named, per component</td><td class="num">&nbsp;</td><td class="num">0.012</td></tr>
+</tbody></table></div>
+<p class="muted">Half the errors seen in a single crop is not enough on its own; the recognizer sees tens of crops of the same state before it decides, which is what the end-to-end numbers measure.</p>
 
 <h3><span class="step-n">4</span>Step recognizer</h3>
 <p>This keeps the accumulate-and-decay core of the published baseline, because that core works and keeping it keeps the numbers comparable. Each frame the most likely state suggests which steps would take the current state there; those steps gain the frame's confidence, everything else decays, and a step completes when its total crosses a threshold. Three things change. The allowed set comes from the graph and moves after every completion. Steps whose preconditions are visibly absent raise an omission flag instead of completing. And an error verdict holds the step open. Parts that appear together, a chassis and its pin, complete together, because that is what the camera saw.</p>
@@ -184,7 +196,7 @@
 <tr><td>0</td><td>reproduce the published baseline from the authors' predictions</td><td class="ok">done, exact to three decimals on all 32 recordings</td></tr>
 <tr><td>1</td><td>procedure graph, compiler, validation against the 22 labelled states</td><td class="ok">done, 10 tests</td></tr>
 <tr><td>2</td><td>render factory with generated errors</td><td class="ok">done, 13,200 renders</td></tr>
-<tr><td>3</td><td>verifier and localizer trained on renders</td><td>running</td></tr>
+<tr><td>3</td><td>verifier and localizer trained on renders</td><td><span class="ok">verifier v3 done</span>; localizer training</td></tr>
 <tr><td>4</td><td>monitor over the 32 test recordings, scored with the authors' code</td><td>queued</td></tr>
 <tr><td>5</td><td>evidence timeline and viewer</td><td class="ok">done, 3 tests</td></tr>
 <tr><td>6</td><td>edge profile</td><td>profiler ready</td></tr>
@@ -199,6 +211,8 @@
 <li>Upgrading the detector library pulled a CPU-only torch into the environment and hid the CUDA build.</li>
 <li>The archive server refuses parallel downloads; four parallel transfers corrupted each other's files and had to be redone.</li>
 <li>Both render batches died at state 15 on the same line: the wheel-loose error edit assumed an axle part had been classified, and that file has none.</li>
+<li>With a few gigabytes of memory free, holding 13,200 token grids in RAM is impossible and a data loader with worker processes exhausts the page file. The build that survived writes tokens straight into a memory-mapped file, resumes from where it stopped, copies to the GPU in chunks, and runs the detector trainer without workers.</li>
+<li>The same training run that died silently inside a background shell finished when run in the foreground. Logs that stop without an error are the machine, not the code; the fix was to look at free memory, not at the script.</li>
 </ol>
 
 <h2>References</h2>
