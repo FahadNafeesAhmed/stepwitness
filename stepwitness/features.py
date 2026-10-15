@@ -65,6 +65,36 @@ class Embedder:
         return np.concatenate(out, axis=0) if out else np.zeros((0, self.dim), dtype=np.float32)
 
 
+    @torch.no_grad()
+    def embed_tokens(self, images: list[Image.Image], image_size: int = 448, grid: int = 8, batch_size: int = 32) -> np.ndarray:
+        """Patch tokens kept as a coarse grid instead of one pooled vector.
+
+        Returns (n, 1 + grid*grid, dim) float16: the CLS token followed by the patch grid average-pooled
+        to grid x grid cells. At 448 pixels a ViT-B/14 sees a 32 x 32 patch grid, so an 8 x 8 cell is
+        4 x 4 patches, about 56 pixels of the crop; a clip or a pin head survives that pooling where it
+        did not survive pooling the whole image to one vector.
+        """
+        out = []
+        for i in range(0, len(images), batch_size):
+            batch = [im.convert("RGB") for im in images[i : i + batch_size]]
+            inputs = self.processor(
+                images=batch,
+                return_tensors="pt",
+                size={"height": image_size, "width": image_size},
+                do_center_crop=False,
+            ).to(self.device)
+            with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=self.device == "cuda"):
+                hidden = self.model(**inputs).last_hidden_state  # (b, 1 + P, d)
+            cls = hidden[:, :1]
+            patches = hidden[:, 1:]
+            side = int(round(patches.shape[1] ** 0.5))
+            g = patches.reshape(patches.shape[0], side, side, -1).permute(0, 3, 1, 2)  # (b, d, side, side)
+            pooled = torch.nn.functional.adaptive_avg_pool2d(g.float(), grid).permute(0, 2, 3, 1).reshape(patches.shape[0], grid * grid, -1)
+            toks = torch.cat([cls.float(), pooled], dim=1)
+            out.append(toks.to(torch.float16).cpu().numpy())
+        return np.concatenate(out, axis=0) if out else np.zeros((0, 1 + grid * grid, self.model.config.hidden_size), dtype=np.float16)
+
+
 def crop_with_margin(image: Image.Image, bbox_xywh: list[float], margin: float = 0.15, square: bool = True) -> Image.Image:
     """Crop a box with a relative margin on each side; optionally pad to a square so the backbone sees
     the assembly at a stable scale regardless of its aspect ratio."""

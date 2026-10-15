@@ -59,13 +59,14 @@ def main() -> None:
     ap.add_argument("--val-fraction", type=float, default=0.1)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--workers", type=int, default=0, help="data-loader worker processes; 0 keeps everything in one process, which this 15 GB machine needs")
     args = ap.parse_args()
 
     yaml = to_yolo(args.renders, args.out / "dataset", args.val_fraction, args.seed, args.limit)
     from ultralytics import YOLO
 
     model = YOLO(args.model)
-    model.train(data=str(yaml), epochs=args.epochs, imgsz=args.imgsz, batch=args.batch, project=str(args.out), name="train", exist_ok=True, seed=args.seed, verbose=False)
+    model.train(data=str(yaml), epochs=args.epochs, imgsz=args.imgsz, batch=args.batch, project=str(args.out), name="train", exist_ok=True, seed=args.seed, verbose=False, workers=args.workers, plots=False)
     print(f"trained localizer; weights under {args.out / 'train' / 'weights'}")
 
 

@@ -33,7 +33,7 @@ def procedure_for(name: str) -> Procedure:
     return Procedure.builtin("industreal_assembly" if "assy" in name else "industreal_maintenance")
 
 
-def run_recording(video: Path, verifier: Verifier, embedder: Embedder, localizer, config: RecognizerConfig, stride: int, conf: float, out: Path) -> dict:
+def run_recording(video: Path, verifier, embedder: Embedder, localizer, config: RecognizerConfig, stride: int, conf: float, out: Path, kind: str = "v2") -> dict:
     name = video.stem
     proc = procedure_for(name)
     rec = Recognizer(proc, verifier.classes, config)
@@ -66,11 +66,21 @@ def run_recording(video: Path, verifier: Verifier, embedder: Embedder, localizer
             rec.update(posterior, frame_no, evidence={"box": None})
             continue
         crop = crop_with_margin(Image.fromarray(rgb), box)
-        emb = embedder.embed([crop])[0]
-        posterior = verifier.posterior(emb[None])[0]
-        top = int(posterior.argmax())
-        evidence = {"box": [round(v, 1) for v in box], "top": verifier.classes[top], "top_p": round(float(posterior[top]), 3)}
-        rec.update(posterior, frame_no, evidence=evidence)
+        if kind == "v3":
+            toks = embedder.embed_tokens([crop], image_size=verifier.image_size, grid=verifier.grid)
+            state_probs, err_probs = verifier.posterior_parts(toks)
+            state_probs, err_probs = state_probs[0], err_probs[0]
+            top = int(state_probs.argmax())
+            worst = int(err_probs.argmax())
+            evidence = {"box": [round(v, 1) for v in box], "top": verifier.classes[top], "top_p": round(float(state_probs[top]), 3),
+                        "err_component": worst, "err_p": round(float(err_probs[worst]), 3)}
+            rec.update_parts(state_probs, verifier.classes, err_probs, frame_no, evidence=evidence)
+        else:
+            emb = embedder.embed([crop])[0]
+            posterior = verifier.posterior(emb[None])[0]
+            top = int(posterior.argmax())
+            evidence = {"box": [round(v, 1) for v in box], "top": verifier.classes[top], "top_p": round(float(posterior[top]), 3)}
+            rec.update(posterior, frame_no, evidence=evidence)
     rec.finalize(frame_no)
     cap.release()
     dt = time.time() - t0
@@ -110,6 +120,7 @@ def main() -> None:
     ap.add_argument("--min-posterior", type=float, default=0.30)
     ap.add_argument("--error-frames", type=int, default=6)
     ap.add_argument("--error-margin", type=float, default=0.10)
+    ap.add_argument("--verifier-kind", choices=["v2", "v3"], default="v2")
     args = ap.parse_args()
 
     from ultralytics import YOLO
@@ -117,7 +128,12 @@ def main() -> None:
     names = sorted(p.name for p in args.recordings.iterdir() if p.is_dir())
     if args.limit:
         names = names[: args.limit]
-    verifier = Verifier.load(args.verifier)
+    if args.verifier_kind == "v3":
+        from stepwitness.verifier_v3 import MultiTaskVerifier
+
+        verifier = MultiTaskVerifier.load(args.verifier)
+    else:
+        verifier = Verifier.load(args.verifier)
     embedder = Embedder(args.model)
     localizer = YOLO(str(args.localizer))
     config = RecognizerConfig(threshold=args.threshold, decay=args.decay, min_posterior=args.min_posterior, error_frames=args.error_frames, error_margin=args.error_margin)
@@ -127,7 +143,7 @@ def main() -> None:
         if not video.exists():
             print(f"missing video for {name}")
             continue
-        summaries.append(run_recording(video, verifier, embedder, localizer, config, args.stride, args.conf, args.out))
+        summaries.append(run_recording(video, verifier, embedder, localizer, config, args.stride, args.conf, args.out, kind=args.verifier_kind))
     (args.out / "summary.json").write_text(json.dumps(summaries, indent=1))
 
 

@@ -84,21 +84,10 @@ class Recognizer:
     # ----- main update -----------------------------------------------------------------------
 
     def update(self, posterior: np.ndarray, frame: int, evidence: dict | None = None) -> list[dict]:
-        """Feed one frame. Returns the events raised on this frame."""
-        self.frame = frame
-        before = len(self.events)
-        cfg = self.config
+        """Feed one frame of a posterior over ``self.classes`` (correct and error codes).
+        Returns the events raised on this frame."""
         top = int(posterior.argmax())
         top_p = float(posterior[top])
-
-        # hold: nothing confident for a while
-        if top_p < cfg.hold_floor:
-            self._hold_streak += 1
-            if self._hold_streak == cfg.hold_frames:
-                self._emit(type="hold", confidence=top_p, evidence=evidence)
-        else:
-            self._hold_streak = 0
-
         # mass per correct state; error classes contribute to the error tally of their component when
         # their correct state is one the procedure could be in now (reachable by an allowed transition)
         correct_mass: dict[str, float] = {}
@@ -112,19 +101,63 @@ class Recognizer:
                     error_mass[comp] = error_mass.get(comp, 0.0) + float(p)
             else:
                 correct_mass[self.classes[ci]] = correct_mass.get(self.classes[ci], 0.0) + float(p)
+        return self._step(self.classes[top], top_p, correct_mass, error_mass, frame, evidence)
 
-        # accumulate toward the steps suggested by the single most likely correct state, as B3 does
-        # with its top detection. A step whose preconditions are complete, or are themselves part of
-        # the same observed transition (a chassis and its pin appear together), is allowed; a step
-        # whose preconditions are visibly absent is only implied, and feeds the omission logic.
+    def update_parts(self, state_probs: np.ndarray, state_codes: list[str], comp_err_probs: np.ndarray, frame: int, evidence: dict | None = None) -> list[dict]:
+        """Feed one frame from the two-head verifier: a posterior over correct states and, per
+        component, the probability that it is installed wrongly."""
+        top = int(state_probs.argmax())
+        top_code = state_codes[top]
+        top_p = float(state_probs[top])
+        top_tuple = code_to_tuple(top_code)
+        # the state head answers "which correct state is this closest to"; the error head answers
+        # "is component k wrong" independently. Turn the pair into the competing masses the core uses:
+        # error mass per installed component, and correct mass discounted by that error evidence.
+        error_mass: dict[int, float] = {}
+        if self.transition_allowed(top_tuple):
+            for k, q in enumerate(comp_err_probs):
+                if q > 0.05 and top_tuple[k] == 1:
+                    error_mass[k] = float(q)
+        correct_mass: dict[str, float] = {}
+        for i, p in enumerate(state_probs):
+            if p <= 1e-6:
+                continue
+            t = code_to_tuple(state_codes[i])
+            disc = 1.0
+            for k, q in error_mass.items():
+                if t[k] == 1:
+                    disc *= 1.0 - q
+            correct_mass[state_codes[i]] = float(p) * disc
+        bad = {k for k, q in error_mass.items() if q > 0.5}
+        return self._step(top_code, top_p, correct_mass, error_mass, frame, evidence, bad_components=bad)
+
+    def _step(self, top_code: str, top_p: float, correct_mass: dict[str, float], error_mass: dict[int, float], frame: int, evidence: dict | None, bad_components: set[int] | None = None) -> list[dict]:
+        self.frame = frame
+        before = len(self.events)
+        cfg = self.config
+
+        # hold: nothing confident for a while
+        if top_p < cfg.hold_floor:
+            self._hold_streak += 1
+            if self._hold_streak == cfg.hold_frames:
+                self._emit(type="hold", confidence=top_p, evidence=evidence)
+        else:
+            self._hold_streak = 0
+
+        # accumulate toward the steps suggested by the single most likely state, as B3 does with its
+        # top detection. A step whose preconditions are complete, or are themselves part of the same
+        # observed transition (a chassis and its pin appear together), is allowed; a step whose
+        # preconditions are visibly absent is only implied, and feeds the omission logic.
         supported: set[int] = set()
         implied: dict[int, float] = {}
         if top_p >= cfg.min_posterior:
-            top_code = self.classes[top]
-            bad = error_component(top_code)
-            # an error class still says every other digit of its correct state is in place
+            bad_set = set(bad_components or ())
+            if error_component(top_code) is not None:
+                bad_set.add(error_component(top_code))
+            # an error class still says every other digit of its correct state is in place; the
+            # components read as wrong do not accumulate toward completion
             target = code_to_tuple(correct_of(top_code))
-            transition = {i for i in self.steps_toward(target) if self.procedure.steps[i].component != bad}
+            transition = {i for i in self.steps_toward(target) if self.procedure.steps[i].component not in bad_set}
             for i in transition:
                 if self.procedure.steps[i].requires <= (self.completed | transition):
                     self.cum[i] += top_p
