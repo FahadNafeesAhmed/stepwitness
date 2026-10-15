@@ -29,6 +29,7 @@ class Embedder:
         # load on the CPU first: a direct load onto the GPU maps the safetensors file through the
         # Windows page file and fails with "paging file too small" when memory is tight
         self.model = AutoModel.from_pretrained(str(model_dir), device_map="cpu", low_cpu_mem_usage=True).to(self.device).eval()
+        self.autocast = True  # mixed precision on CUDA; the profiler turns it off to measure true FP32
         self.pooling = pooling
         self.image_size = image_size
         for p in self.model.parameters():
@@ -50,7 +51,7 @@ class Embedder:
                 size={"height": self.image_size, "width": self.image_size},
                 do_center_crop=False,
             ).to(self.device)
-            with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=self.device == "cuda"):
+            with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=self.device == "cuda" and self.autocast):
                 hidden = self.model(**inputs).last_hidden_state  # (b, 1 + patches, d)
             cls = hidden[:, 0]
             mean = hidden[:, 1:].mean(dim=1)
@@ -83,7 +84,7 @@ class Embedder:
                 size={"height": image_size, "width": image_size},
                 do_center_crop=False,
             ).to(self.device)
-            with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=self.device == "cuda"):
+            with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=self.device == "cuda" and self.autocast):
                 hidden = self.model(**inputs).last_hidden_state  # (b, 1 + P, d)
             cls = hidden[:, :1]
             patches = hidden[:, 1:]

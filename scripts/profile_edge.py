@@ -97,6 +97,18 @@ def percentiles(ms: list[float]) -> dict:
 
 
 def time_localizer(localizer, frames, half: bool) -> tuple[dict, list]:
+    if hasattr(localizer, "locate"):  # the fallback patch localizer runs on the embedder; half is the embedder's setting
+        boxes, ms = [], []
+        for f in frames[:10]:
+            localizer.locate(Image.fromarray(f))
+        torch.cuda.synchronize()
+        for f in frames:
+            t0 = time.perf_counter()
+            b, _ = localizer.locate(Image.fromarray(f))
+            torch.cuda.synchronize()
+            ms.append((time.perf_counter() - t0) * 1000)
+            boxes.append(b)
+        return percentiles(ms), boxes
     boxes = []
     ms = []
     for f in frames[:10]:
@@ -116,22 +128,33 @@ def time_localizer(localizer, frames, half: bool) -> tuple[dict, list]:
     return percentiles(ms), boxes
 
 
-def time_verifier(embedder: Embedder, verifier: Verifier, crops, half: bool) -> tuple[dict, list[int]]:
+def time_verifier(embedder: Embedder, verifier, crops, half: bool) -> tuple[dict, list[int]]:
+    """FP32 means weights and compute in float32 with autocast off; FP16 means half weights under autocast.
+    Works for the pooled verifier (v2) and the patch-token verifier (v3)."""
     model = embedder.model
+    embedder.autocast = half
     if half:
         model.half()
+    v3 = hasattr(verifier, "posterior_parts")
+
+    def run(c):
+        if v3:
+            toks = embedder.embed_tokens([c], image_size=verifier.image_size, grid=verifier.grid, batch_size=1)
+            return int(verifier.posterior_parts(toks)[0][0].argmax())
+        return int(verifier.posterior(embedder.embed([c]))[0].argmax())
+
     preds, ms = [], []
     for c in crops[:10]:
-        embedder.embed([c])
+        run(c)
     torch.cuda.synchronize()
     for c in crops:
         t0 = time.perf_counter()
-        e = embedder.embed([c])
+        preds.append(run(c))
         torch.cuda.synchronize()
         ms.append((time.perf_counter() - t0) * 1000)
-        preds.append(int(verifier.posterior(e)[0].argmax()))
     if half:
         model.float()
+    embedder.autocast = True
     return percentiles(ms), preds
 
 
@@ -144,17 +167,31 @@ def main() -> None:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--frames", type=int, default=300)
     ap.add_argument("--version", default="0.1.0")
+    ap.add_argument("--verifier-kind", choices=["v2", "v3"], default="v2")
     args = ap.parse_args()
 
     from ultralytics import YOLO
 
     frames = load_frames(args.video, args.frames)
-    localizer = YOLO(str(args.localizer))
-    verifier = Verifier.load(args.verifier)
+    if args.verifier_kind == "v3":
+        from stepwitness.verifier_v3 import MultiTaskVerifier
+
+        verifier = MultiTaskVerifier.load(args.verifier)
+    else:
+        verifier = Verifier.load(args.verifier)
     embedder = Embedder(args.model)
+    if args.localizer.is_dir() and (args.localizer / "patch_localizer.npz").exists():
+        from stepwitness.localizer_patch import PatchLocalizer
+
+        localizer = PatchLocalizer.load(args.localizer, embedder)
+    else:
+        localizer = YOLO(str(args.localizer))
     profile = {
         "model": "stepwitness",
         "version": args.version,
+        "verifier": {"kind": args.verifier_kind, "image_size": getattr(verifier, "image_size", 224), "backbone": args.model.name},
+        "localizer": "patch" if hasattr(localizer, "locate") else "yolov8n",
+        "precision_note": "fp32 = float32 weights and compute, autocast off; fp16 = half weights under autocast",
         "previous_version": None,
         "hardware": hardware(),
         "input": {"video": args.video.name, "frames": len(frames), "resolution": list(frames[0].shape[:2][::-1]) if frames else None},
