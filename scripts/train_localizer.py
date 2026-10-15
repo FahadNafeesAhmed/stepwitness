@@ -66,7 +66,7 @@ def main() -> None:
     from ultralytics import YOLO
 
     model = YOLO(args.model)
-    model.train(data=str(yaml), epochs=args.epochs, imgsz=args.imgsz, batch=args.batch, project=str(args.out), name="train", exist_ok=True, seed=args.seed, verbose=False, workers=args.workers, plots=False)
+    model.train(data=str(yaml), epochs=args.epochs, imgsz=args.imgsz, batch=args.batch, project=str(args.out.resolve()), name="train", exist_ok=True, seed=args.seed, verbose=False, workers=args.workers, plots=False)
     print(f"trained localizer; weights under {args.out / 'train' / 'weights'}")
 
 
