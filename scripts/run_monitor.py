@@ -44,6 +44,7 @@ def run_recording(video: Path, verifier, embedder: Embedder, localizer, config: 
     n_detected = 0
     last_box = None
     trace = []  # one compact row per processed frame, for the clips and the page
+    post_frames, post_state, post_err = [], [], []  # the verifier's full output per processed frame, for offline re-scoring
     while True:
         ok, frame = cap.read()
         if not ok:
@@ -72,6 +73,9 @@ def run_recording(video: Path, verifier, embedder: Embedder, localizer, config: 
             posterior = np.full(len(verifier.classes), 1.0 / len(verifier.classes))
             rec.update(posterior, frame_no, evidence={"box": None})
             trace.append([frame_no, None, None, None, None, None])
+            post_frames.append(frame_no)
+            post_state.append(np.full(len(verifier.classes), np.nan, dtype=np.float32))
+            post_err.append(np.full(11, np.nan, dtype=np.float32))
             continue
         crop = crop_with_margin(Image.fromarray(rgb), box)
         if kind == "v3":
@@ -83,6 +87,9 @@ def run_recording(video: Path, verifier, embedder: Embedder, localizer, config: 
             evidence = {"box": [round(v, 1) for v in box], "top": verifier.classes[top], "top_p": round(float(state_probs[top]), 3),
                         "err_component": worst, "err_p": round(float(err_probs[worst]), 3)}
             rec.update_parts(state_probs, verifier.classes, err_probs, frame_no, evidence=evidence)
+            post_frames.append(frame_no)
+            post_state.append(np.asarray(state_probs, dtype=np.float32))
+            post_err.append(np.asarray(err_probs, dtype=np.float32))
         else:
             emb = embedder.embed([crop])[0]
             posterior = verifier.posterior(emb[None])[0]
@@ -97,6 +104,10 @@ def run_recording(video: Path, verifier, embedder: Embedder, localizer, config: 
     out.mkdir(parents=True, exist_ok=True)
     (out / f"{name}.events.json").write_text(json.dumps(events, indent=1))
     (out / f"{name}.trace.json").write_text(json.dumps(trace, separators=(",", ":")))
+    if post_frames and kind == "v3":
+        np.savez_compressed(out / f"{name}.posteriors.npz", frames=np.array(post_frames), state=np.stack(post_state),
+                            err=np.stack(post_err), classes=np.array(verifier.classes),
+                            boxes=np.array([(r[1] if r[1] is not None else [np.nan] * 4) for r in trace], dtype=np.float32))
     proc_info = json.loads((ROOT / "third_party" / "IndustReal" / "PSR" / "procedure_info.json").read_text())
     yhat = rec.y_hat(proc_info)
     (out / f"{name}.yhat.json").write_text(json.dumps(yhat, indent=1))
