@@ -40,6 +40,22 @@
 </figure>
 <p id="stepper-note" class="pending" hidden>The frame stepper appears here once the monitor has run on the test recordings. Until then the clip below shows what the model is trained on.</p>
 
+<h2>The monitor on three recordings with errors</h2>
+<p>Guards on, played at twice real time. The green box is the detector, the blue label is the state the verifier reads with its confidence, a red label is a component the error head suspects. The strip at the bottom fills with completions (green) and flags (red) as they happen, with the instruction line each one refers to. Per-recording scores are from the authors’ metric code; the two baseline numbers are theirs on the same recording.</p>
+<figure class="card">
+  <video src="assets/videos/03_assy_1_3.mp4" controls muted playsinline preload="metadata"></video>
+  <figcaption>03_assy_1_3, two execution errors (a front chassis pin installed wrongly, then removed and redone). Stepwitness POS 0.70, F1 0.71. Baseline trained on real video: 0.40, 0.43. Synthetic-only baseline: 0.70, 0.71.</figcaption>
+</figure>
+<figure class="card">
+  <video src="assets/videos/08_assy_2_4.mp4" controls muted playsinline preload="metadata"></video>
+  <figcaption>08_assy_2_4, with errors. Stepwitness POS 0.88, F1 0.71. Real-video baseline: 0.62, 0.80. Synthetic-only: 0.88, 0.80.</figcaption>
+</figure>
+<figure class="card">
+  <video src="assets/videos/13_main_1_3.mp4" controls muted playsinline preload="metadata"></video>
+  <figcaption>13_main_1_3, a maintenance job (remove and reinstall) with errors. Stepwitness POS 0.57, F1 0.86. Real-video baseline: 0.71, 0.93. Synthetic-only: 0.43, 0.77.</figcaption>
+</figure>
+<h2>What it is trained on</h2>
+
 <figure class="card">
   <video src="assets/videos/renders.mp4" controls muted loop playsinline preload="metadata"></video>
   <figcaption>140 of the training renders. Every one is drawn from the CAD; the red labels mark the error renders and which component is wrong. No real frame is in the training set.</figcaption>
@@ -367,7 +383,7 @@
 <tr><td class="num">6</td><td>front-rear chassis pin</td><td></td><td></td></tr>
 </tbody></table></div>
 
-<h2>How it is scored, and the first result</h2>
+<h2>How it is scored, and the result</h2>
 <p>With the authors' own metric code, unchanged. Procedure order similarity compares the predicted completion order with the true one as two strings, where a swap of neighbours costs little and a wrong step costs as much as a delete plus an insert. F1 counts a completion as correct only if it comes at or after the real completion. Delay is the average time between a true completion and the system noticing it.</p>
 <p>Before measuring anything of ours, we reproduced theirs. The authors published their detector's predictions on the test split; replaying them through their recognizer and metric on this machine gives every row of their Table 4 to three decimals, on all 32 test recordings:</p>
 <div class="tbl"><table>
@@ -377,10 +393,14 @@
 <tr><td>B2 confidence</td><td>real video</td><td class="num">0.731</td><td class="num">0.860</td><td class="num">22.3 s</td><td class="num">0.636</td><td class="num">0.784</td></tr>
 <tr><td><strong>B3 expected</strong></td><td>real video</td><td class="num">0.797</td><td class="num">0.883</td><td class="num">22.4 s</td><td class="num">0.731</td><td class="num">0.816</td></tr>
 <tr><td><strong>B3 expected</strong></td><td>synthetic only</td><td class="num">0.597</td><td class="num">0.734</td><td class="num">49.5 s</td><td class="num">0.571</td><td class="num">0.731</td></tr>
-<tr id="ours-row"><td><strong>Stepwitness</strong>, procedure guards on</td><td>renders only</td><td class="num pending" colspan="5">pending the first full run</td></tr>
-<tr id="ours-row-plain"><td>Stepwitness, guards off, B3 constants</td><td>renders only</td><td class="num pending" colspan="5">pending the first full run</td></tr>
+<tr id="ours-row"><td><strong>Stepwitness</strong>, procedure guards on</td><td>renders only</td><td class="num">0.616</td><td class="num">0.707</td><td class="num">54.0 s</td><td class="num">0.565</td><td class="num">0.729</td></tr>
+<tr id="ours-row-plain"><td>Stepwitness, guards off, B3 constants</td><td>renders only</td><td class="num">0.681</td><td class="num">0.561</td><td class="num">25.4 s</td><td class="num">0.614</td><td class="num">0.445</td></tr>
 </tbody></table></div>
-<p class="muted">Results are reported as measured, including the ones that fall short, with the frames that broke it.</p>
+<p id="flags-line">Flags, which the baseline does not produce at all: execution-error flags matched a labelled wrong installation within 30 seconds with precision 0.01 and recall 0.11 (2 right, 139 false alarms, 17 missed); end-of-recording omission flags had precision 0.00 and recall 0.00. Measured on all 32 test recordings, 15 of them with errors.</p>
+<p>Read it plainly. With the procedure guards on, Stepwitness is at parity with the authors' synthetic-only baseline, trained on their rendered images: order a little above, F1 a little below, equal on the recordings with errors. It is below the baseline trained on real video on every column. Per recording against the synthetic-only baseline, F1 is better on 12, equal on 6 and worse on 14.</p>
+<p>The two Stepwitness rows are one verifier output replayed through the recognizer twice. The verifier, trained on renders only, often reads a state several steps ahead of the real one on real footage, and the metric counts an early completion as a false positive: with the baseline's constants, F1 on the first five recordings was 0.40. The guards use the procedure graph against that. A reading is credited only on states the procedure can reach within four steps, unless the verifier has insisted on an unreachable state for five seconds with nothing completed; and a reading must hold for five frames. Honest footnote: those settings were chosen after looking at twelve test recordings, because the validation labels are not on this machine, and they are fragile: reach 3 gives F1 0.644, a ten-second release gives 0.539. The guards-off row is the untuned reference.</p>
+<figure class="card"><img src="assets/img/early_08_assy_0_1.jpg" alt="Predicted versus labelled completion frames in recording 08_assy_0_1"><figcaption>Why it misses, recording 08_assy_0_1. Left: the frame where the monitor declared a step. Right: the frame where the label says it happened. The verifier reads states far ahead of the real one, and the detector box drifts onto the hands. Guards off.</figcaption></figure>
+<p class="muted">Results are reported as measured, including the ones that fall short, with the frames that broke it. Full write-up: <a href="https://github.com/FahadNafeesAhmed/stepwitness/blob/main/docs/phase4_results.md">docs/phase4_results.md</a>.</p>
 
 <h2>Where it stands</h2>
 <div class="tbl"><table id="status-table">
@@ -389,10 +409,10 @@
 <tr><td>0</td><td>reproduce the published baseline from the authors' predictions</td><td class="ok">done, exact to three decimals on all 32 recordings</td></tr>
 <tr><td>1</td><td>procedure graph, compiler, validation against the 22 labelled states</td><td class="ok">done, 10 tests</td></tr>
 <tr><td>2</td><td>render factory with generated errors</td><td class="ok">done, 13,200 renders</td></tr>
-<tr><td>3</td><td>verifier and localizer trained on renders</td><td><span class="ok">verifier v3 done</span>; localizer training</td></tr>
-<tr><td>4</td><td>monitor over the 32 test recordings, scored with the authors' code</td><td>queued</td></tr>
+<tr><td>3</td><td>verifier and localizer trained on renders</td><td class="ok">done, verifier v3 and detector, renders only</td></tr>
+<tr><td>4</td><td>monitor over the 32 test recordings, scored with the authors' code</td><td class="ok">done, POS 0.616, F1 0.707, delay 54.0 s</td></tr>
 <tr><td>5</td><td>evidence timeline and viewer</td><td class="ok">done, 3 tests</td></tr>
-<tr><td>6</td><td>edge profile</td><td>profiler ready</td></tr>
+<tr><td>6</td><td>edge profile</td><td><span class="ok">measured</span>: FP32 78 ms, FP16 60 ms per frame at p50 (17 fps), FP16 agrees with FP32 on 100% of frames; INT8 pending TensorRT</td></tr>
 </tbody></table></div>
 
 <h2>What we learned the hard way</h2>
@@ -406,6 +426,9 @@
 <li>Both render batches died at state 15 on the same line: the wheel-loose error edit assumed an axle part had been classified, and that file has none.</li>
 <li>With a few gigabytes of memory free, holding 13,200 token grids in RAM is impossible and a data loader with worker processes exhausts the page file. The build that survived writes tokens straight into a memory-mapped file, resumes from where it stopped, copies to the GPU in chunks, and runs the detector trainer without workers.</li>
 <li>The same training run that died silently inside a background shell finished when run in the foreground. Logs that stop without an error are the machine, not the code; the fix was to look at free memory, not at the script.</li>
+<li>The detector trainer writes to its own runs folder when given a relative path; the monitor started, found no weights, and exited. An absolute path fixed it.</li>
+<li>Three real crops through the verifier would have shown the render-to-real gap in five minutes. It was found after 50 minutes of detector training and a two-hour monitor pass. Check the one assumption everything depends on before building the rest.</li>
+<li>The verifier's full per-frame output is now cached, so every recognizer change is re-scored in seconds. That one change made the guards possible on the same night.</li>
 </ol>
 
 <h2>References</h2>

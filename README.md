@@ -9,19 +9,22 @@ labelled execution errors and published part geometry.
 
 ## Status
 
-Measured so far: the published baseline reproduces exactly (phase 0), and the verifier identifies the
-correct state on 91.6 percent of held-out renders with 54 percent single-crop error recall (phase 3,
-see docs/phase3_verifier.md). No number on real footage exists yet; that is the phase 4 run.
+Measured: the published baseline reproduces exactly (phase 0); the verifier identifies the correct
+state on 91.6 percent of held-out renders (phase 3); on the 32 test recordings, trained on renders
+only, Stepwitness scores POS 0.616 / F1 0.707 with the procedure guards on and 0.681 / 0.561 with
+the baseline's constants, against 0.597 / 0.734 for the authors' synthetic-only baseline and
+0.797 / 0.883 for their real-video baseline (phase 4, docs/phase4_results.md, including how the
+guard settings were chosen and why the flags do not work yet).
 
 | Phase | What | State |
 |---|---|---|
 | 0 | reproduce the published baseline from the authors' predictions | done, exact to three decimals on all 32 recordings (docs/phase0_baseline.md) |
 | 1 | procedure graph, LLM compiler, validation against the 22 labelled states | done, 10 tests |
 | 2 | render factory: correct states and generated errors from the CAD | done, 13,200 renders, 144 label codes |
-| 3 | verifier (frozen DINOv2 patch grid, state + component-error heads) and one-class localizer | verifier v3 built and measured on renders; localizer training |
-| 4 | step recognizer, monitor over the 32 test recordings, PSR scores | recognizer done, 7 tests; monitor run queued behind the localizer |
+| 3 | verifier (frozen DINOv2 patch grid, state + component-error heads) and one-class localizer | done, both trained on renders only |
+| 4 | step recognizer, monitor over the 32 test recordings, PSR scores | done; parity with the synthetic-only baseline, below the real-video one; flags unusable yet |
 | 5 | evidence timeline and viewer | done, 3 tests |
-| 6 | edge profile (FP32, FP16, INT8 when TensorRT is available) | profiler ready |
+| 6 | edge profile (FP32, FP16, INT8 when TensorRT is available) | measured: FP32 78 ms, FP16 60 ms per frame (p50); INT8 pending |
 
 ## Layout
 
