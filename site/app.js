@@ -33,6 +33,8 @@
       box.style.height = (100 * bh / h) + '%';
     } else box.style.display = 'none';
     hud.textContent = `frame ${fr.frame}  ·  ${fmt(fr.frame)}` + (fr.top ? `  ·  ${fr.top}  p=${fr.top_p.toFixed(2)}` : '');
+    hud.classList.toggle('err', !!fr.err);
+    if (fr.err) hud.textContent += `  ·  component ${fr.err[0]} error p=${fr.err[1].toFixed(2)}`;
     cursor.style.left = (100 * fr.frame / rec.n_frames) + '%';
     for (const t of bar.querySelectorAll('.tick')) t.classList.toggle('done', Number(t.dataset.frame) <= fr.frame);
     const shown = rec.events.filter(e => e.frame <= fr.frame && e.type !== 'hold');

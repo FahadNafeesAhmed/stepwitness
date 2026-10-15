@@ -34,6 +34,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from stepwitness.procedure import Procedure  # noqa: E402
+from stepwitness.timeline import frame_evidence  # noqa: E402
 
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 INK = (42, 42, 42)
@@ -108,14 +109,10 @@ def make_monitor(args) -> None:
     cap = cv2.VideoCapture(str(args.video))
     n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     end = args.end or n_frames
-    boxes = {}
-    tops = {}
-    for e in events:
-        ev = e.get("evidence") or {}
-        if ev.get("box"):
-            boxes[e["frame"]] = ev["box"]
-        if ev.get("top"):
-            tops[e["frame"]] = (ev["top"], ev.get("top_p"))
+    per_frame = frame_evidence(args.events, name, events)
+    boxes = {f: r["box"] for f, r in per_frame.items()}  # None where the frame was processed and nothing found
+    tops = {f: (r["top"], r["top_p"]) for f, r in per_frame.items() if r.get("top")}
+    errs = {f: (r["err_component"], r["err_p"]) for f, r in per_frame.items() if r.get("err_p") is not None}
     with tempfile.TemporaryDirectory() as td:
         tdp = Path(td)
         out_i = 0
@@ -132,8 +129,8 @@ def make_monitor(args) -> None:
                 canvas = np.full((h + 120, w, 3), PAPER, dtype=np.uint8)
                 canvas[:h] = frame
                 b = boxes.get(fno, last_box)
+                last_box = b
                 if b:
-                    last_box = b
                     sx = w / 1280
                     x, y, bw, bh = [int(v * sx) for v in b]
                     cv2.rectangle(canvas, (x, y), (x + bw, y + bh), GREEN, 2)
@@ -141,6 +138,10 @@ def make_monitor(args) -> None:
                 if t:
                     last_top = t
                 state_text = f"state {t[0].replace(',', '')}  p={t[1]:.2f}" if t and t[1] is not None else ""
+                er = errs.get(fno)
+                if er and er[1] is not None and er[1] >= 0.5 and b:
+                    ex, ey = int(b[0] * (w / 1280)), int(b[1] * (w / 1280))
+                    put_text(canvas, f"component {er[0]} error p={er[1]:.2f}", (ex, max(ey - 8, 20)), 0.5, WHITE, 1, bg=RED)
                 so_far = [e for e in events if e["frame"] <= fno]
                 draw_panel(canvas, so_far, lines, state_text, fno, n_frames, events)
                 put_text(canvas, f"{name}  frame {fno}", (12, 24), 0.55, WHITE, 1, bg=INK)

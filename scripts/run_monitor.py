@@ -43,6 +43,7 @@ def run_recording(video: Path, verifier, embedder: Embedder, localizer, config: 
     frame_no = -1
     n_detected = 0
     last_box = None
+    trace = []  # one compact row per processed frame, for the clips and the page
     while True:
         ok, frame = cap.read()
         if not ok:
@@ -70,6 +71,7 @@ def run_recording(video: Path, verifier, embedder: Embedder, localizer, config: 
             # no assembly found: nothing to accumulate; let the recognizer decay and count a low-confidence frame
             posterior = np.full(len(verifier.classes), 1.0 / len(verifier.classes))
             rec.update(posterior, frame_no, evidence={"box": None})
+            trace.append([frame_no, None, None, None, None, None])
             continue
         crop = crop_with_margin(Image.fromarray(rgb), box)
         if kind == "v3":
@@ -87,12 +89,14 @@ def run_recording(video: Path, verifier, embedder: Embedder, localizer, config: 
             top = int(posterior.argmax())
             evidence = {"box": [round(v, 1) for v in box], "top": verifier.classes[top], "top_p": round(float(posterior[top]), 3)}
             rec.update(posterior, frame_no, evidence=evidence)
+        trace.append([frame_no, evidence["box"], evidence["top"], evidence["top_p"], evidence.get("err_component"), evidence.get("err_p")])
     rec.finalize(frame_no)
     cap.release()
     dt = time.time() - t0
     events = rec.events
     out.mkdir(parents=True, exist_ok=True)
     (out / f"{name}.events.json").write_text(json.dumps(events, indent=1))
+    (out / f"{name}.trace.json").write_text(json.dumps(trace, separators=(",", ":")))
     proc_info = json.loads((ROOT / "third_party" / "IndustReal" / "PSR" / "procedure_info.json").read_text())
     yhat = rec.y_hat(proc_info)
     (out / f"{name}.yhat.json").write_text(json.dumps(yhat, indent=1))

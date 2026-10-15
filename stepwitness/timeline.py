@@ -21,6 +21,33 @@ class Span:
         return (self.end_frame - self.start_frame) / FPS
 
 
+TRACE_FIELDS = ("frame", "box", "top", "top_p", "err_component", "err_p")
+
+
+def frame_evidence(events_dir, name: str, events: list[dict]) -> dict[int, dict]:
+    """Per-frame evidence for drawing: the localizer box, the verifier's top state and confidence,
+    and the most suspect component. Read from ``<name>.trace.json`` (one row per processed frame,
+    written by the monitor); a processed frame where nothing was found is present with ``box`` None,
+    so a drawing loop can clear the box. Older runs without a trace fall back to the evidence carried
+    on events, which only exists at event frames."""
+    import json
+    from pathlib import Path
+
+    trace = Path(events_dir) / f"{name}.trace.json"
+    out: dict[int, dict] = {}
+    if trace.exists():
+        for row in json.loads(trace.read_text()):
+            rec = dict(zip(TRACE_FIELDS, row))
+            out[int(rec["frame"])] = rec
+        return out
+    for e in events:
+        ev = e.get("evidence") or {}
+        if ev.get("box"):
+            out[int(e["frame"])] = {"frame": e["frame"], "box": ev["box"], "top": ev.get("top"), "top_p": ev.get("top_p"),
+                                    "err_component": ev.get("err_component"), "err_p": ev.get("err_p")}
+    return out
+
+
 def completions(events: list[dict]) -> list[dict]:
     return sorted((e for e in events if e["type"] == "completion"), key=lambda e: e["frame"])
 

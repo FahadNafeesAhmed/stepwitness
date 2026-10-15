@@ -20,6 +20,7 @@ import cv2
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from stepwitness.procedure import Procedure  # noqa: E402
+from stepwitness.timeline import frame_evidence  # noqa: E402
 
 
 def main() -> None:
@@ -47,11 +48,7 @@ def main() -> None:
     for e in events:
         if e["type"] != "hold":
             wanted.add(e["frame"])
-    by_frame = {}
-    for e in events:
-        ev = e.get("evidence") or {}
-        if ev.get("box") or ev.get("top"):
-            by_frame[e["frame"]] = ev
+    by_frame = frame_evidence(args.events, name, events)
     frames = []
     last_ev = None
     fno = -1
@@ -61,7 +58,7 @@ def main() -> None:
             break
         fno += 1
         if fno in by_frame:
-            last_ev = by_frame[fno]
+            last_ev = by_frame[fno] if by_frame[fno].get("box") else None
         if fno not in wanted:
             continue
         scale = args.width / src_w
@@ -75,6 +72,8 @@ def main() -> None:
             if last_ev.get("top"):
                 rec["top"] = last_ev["top"].replace(",", "")
                 rec["top_p"] = last_ev.get("top_p", 0.0)
+            if last_ev.get("err_p") is not None and last_ev["err_p"] >= 0.5:
+                rec["err"] = [last_ev.get("err_component"), round(float(last_ev["err_p"]), 2)]
         frames.append(rec)
     cap.release()
 
