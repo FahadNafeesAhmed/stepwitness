@@ -88,12 +88,19 @@ class Recognizer:
         if key in self._reach_cache:
             return self._reach_cache[key]
         steps = self.steps_toward(target)
-        state = self.state
-        for i in self.procedure.topological(self.completed | steps) if steps else ():
-            if i in steps:
-                state = self.procedure.apply(state, i)
-        ok = state == target and self.transition_allowed(target)
-        out = len(steps) if ok else None
+        out: int | None = None
+        if self.transition_allowed(target):
+            try:
+                order = self.procedure.topological(self.completed | steps) if steps else []
+            except ValueError:  # the implied step set is not closed under preconditions: not a transition
+                order = None
+            if order is not None:
+                state = self.state
+                for i in order:
+                    if i in steps:
+                        state = self.procedure.apply(state, i)
+                if state == target:
+                    out = len(steps)
         self._reach_cache[key] = out
         return out
 

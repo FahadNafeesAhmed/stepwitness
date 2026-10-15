@@ -62,8 +62,9 @@ def main() -> None:
 
     res = {"all": summarize(m_all), "with_errors": summarize(m_err), "without_errors": summarize(m_ok), "recordings": per}
     a, e = res["all"], res["with_errors"]
-    row = (f"| {args.label} | renders only | {a['pos']:.3f} | {a['f1']:.3f} | {a['delay_s']:.1f} | "
-           f"{e['pos']:.3f} | {e['f1']:.3f} | {e['delay_s']:.1f} | {a['n']} / {e['n']} |") if a["n"] else "| no recordings scored |"
+    fmt = lambda g, k, nd: (f"{g[k]:.{nd}f}" if g["n"] and g[k] is not None else "-")  # noqa: E731
+    row = (f"| {args.label} | renders only | {fmt(a, 'pos', 3)} | {fmt(a, 'f1', 3)} | {fmt(a, 'delay_s', 1)} | "
+           f"{fmt(e, 'pos', 3)} | {fmt(e, 'f1', 3)} | {fmt(e, 'delay_s', 1)} | {a['n']} / {e['n']} |") if a["n"] else "| no recordings scored |"
     print(row)
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "psr_results.json").write_text(json.dumps(res, indent=1))
