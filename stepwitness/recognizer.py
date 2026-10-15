@@ -37,6 +37,8 @@ class RecognizerConfig:
     omission_frames: int = 6  # consecutive frames implying a skipped step before an omission flag
     hold_frames: int = 15  # consecutive low-confidence frames before a hold event
     hold_floor: float = 0.25  # top posterior below this counts as low confidence
+    reach: int = 0  # credit only mass on states within this many transitions of the current state (0 = off)
+    stable_frames: int = 0  # the top state must hold this many consecutive confident frames before it earns credit (0 = off)
 
 
 @dataclass
@@ -57,6 +59,9 @@ class Recognizer:
         self._flagged_omissions: set[int] = set()
         self._flagged_errors: dict[int, int] = {}  # component -> frame of last flag
         self._class_tuples = [code_to_tuple(c) for c in self.classes]
+        self._reach_cache: dict[tuple, int | None] = {}
+        self._last_top: str | None = None
+        self._top_streak = 0
         self._class_is_error = [error_component(c) is not None for c in self.classes]
         self._class_correct = [correct_of(c) for c in self.classes]
 
@@ -75,6 +80,34 @@ class Recognizer:
 
     def allowed(self) -> set[int]:
         return self.procedure.allowed(self.completed)
+
+    def reach_of(self, target: tuple) -> int | None:
+        """How many steps the procedure needs to turn the current state into ``target``, or None when
+        no allowed transition does so. The current state itself has reach 0."""
+        key = (self.state, target)
+        if key in self._reach_cache:
+            return self._reach_cache[key]
+        steps = self.steps_toward(target)
+        state = self.state
+        for i in self.procedure.topological(self.completed | steps) if steps else ():
+            if i in steps:
+                state = self.procedure.apply(state, i)
+        ok = state == target and self.transition_allowed(target)
+        out = len(steps) if ok else None
+        self._reach_cache[key] = out
+        return out
+
+    def mask_to_reach(self, state_probs: np.ndarray, state_codes: list[str]) -> np.ndarray:
+        """Zero the posterior on states the procedure cannot be in within ``config.reach`` transitions.
+        No renormalisation: mass placed on impossible states is simply not credited."""
+        k = self.config.reach
+        if k <= 0:
+            return state_probs
+        keep = np.zeros(len(state_codes), dtype=bool)
+        for i, c in enumerate(state_codes):
+            r = self.reach_of(code_to_tuple(c))
+            keep[i] = r is not None and r <= k
+        return np.where(keep, state_probs, 0.0)
 
     def _emit(self, **event) -> dict:
         event.setdefault("frame", self.frame)
@@ -106,6 +139,7 @@ class Recognizer:
     def update_parts(self, state_probs: np.ndarray, state_codes: list[str], comp_err_probs: np.ndarray, frame: int, evidence: dict | None = None) -> list[dict]:
         """Feed one frame from the two-head verifier: a posterior over correct states and, per
         component, the probability that it is installed wrongly."""
+        state_probs = self.mask_to_reach(np.asarray(state_probs, dtype=np.float64), state_codes)
         top = int(state_probs.argmax())
         top_code = state_codes[top]
         top_p = float(state_probs[top])
@@ -150,7 +184,14 @@ class Recognizer:
         # preconditions are visibly absent is only implied, and feeds the omission logic.
         supported: set[int] = set()
         implied: dict[int, float] = {}
-        if top_p >= cfg.min_posterior:
+        if top_p >= cfg.min_posterior and top_code == self._last_top:
+            self._top_streak += 1
+        elif top_p >= cfg.min_posterior:
+            self._last_top, self._top_streak = top_code, 1
+        else:
+            self._last_top, self._top_streak = None, 0
+        stable = cfg.stable_frames <= 0 or self._top_streak >= cfg.stable_frames
+        if top_p >= cfg.min_posterior and stable:
             bad_set = set(bad_components or ())
             if error_component(top_code) is not None:
                 bad_set.add(error_component(top_code))
