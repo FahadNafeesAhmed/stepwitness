@@ -86,7 +86,7 @@ td.flag { color: var(--red); font-weight: 600; }
 
 /* architecture diagram */
 .diagram { overflow-x: auto; background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 10px; }
-.diagram svg { display: block; width: 100%; min-width: 760px; height: auto; }
+.diagram svg { display: block; width: 100%; min-width: 1100px; height: auto; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 13px; color: var(--slate); margin-top: 8px; justify-content: center; }
 .legend span::before { content: ""; display: inline-block; width: 20px; border-top: 2px solid var(--ink); margin-right: 7px; vertical-align: middle; }
 .legend span.dash::before { border-top-style: dashed; border-color: var(--blue); }
