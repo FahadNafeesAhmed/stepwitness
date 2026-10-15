@@ -136,18 +136,82 @@ def draw(seed: int) -> str:
     return s.svg(W, H, "Stepwitness architecture: setup lane and runtime lane")
 
 
+
+
+# ----- results chart ---------------------------------------------------------------------------
+PALETTE = {"real": "#e9ecef", "synth": "#ffffff", "on": "#ffec99", "off": "#ffc9c9"}
+LABELS = {"real": "B3, real video", "synth": "B3, synthetic only", "on": "Stepwitness, guards on", "off": "Stepwitness, guards off"}
+
+
+def load_results() -> dict:
+    """Four systems x {all, with_errors} x {pos, f1, delay_s}, read from the score files."""
+    import json
+
+    b = json.loads((ROOT / "runs/phase0/baseline_results.json").read_text())
+    g = json.loads((ROOT / "runs/phase4/monitor_v3_guarded/psr_results.json").read_text())
+    q = json.loads((ROOT / "runs/phase4/monitor_v3_plain/psr_results.json").read_text())
+    return {"real": b["real_trained/expected"], "synth": b["synthetic_only/expected"], "on": g, "off": q}
+
+
+def draw_results(seed: int) -> str:
+    res = load_results()
+    s = Sketch(seed + 1)
+    W, H = 760, 400
+    systems = ["real", "synth", "on", "off"]
+    panels = [("all", "All 32 recordings", 40), ("with_errors", "The 15 recordings with errors", 400)]
+    y0, y1 = 300, 70  # baseline and top of the 0..1 axis
+    for key, title, x0 in panels:
+        s.text(x0 + 2, 38, title, size=17)
+        # axis with ticks at 0, 0.25 ... 1
+        s.line(x0, y1 - 6, x0, y0)
+        s.line(x0, y0, x0 + 300, y0)
+        for t in range(5):
+            yy = y0 - (y0 - y1) * t / 4
+            s.line(x0 - 5, yy, x0, yy, width=1.3, double=False)
+            s.text(x0 - 9, yy + 4, f"{t / 4:.2f}".rstrip("0").rstrip(".") if t else "0", size=11.5, anchor="end", color="#6b6b6b")
+        for gi, (metric, mlabel) in enumerate([("pos", "order similarity (POS)"), ("f1", "F1")]):
+            gx = x0 + 24 + gi * 150
+            for si, sysk in enumerate(systems):
+                v = res[sysk][key][metric]
+                bx = gx + si * 30
+                bh = (y0 - y1) * v
+                s.rect(bx, y0 - bh, 24, bh, fill=PALETTE[sysk])
+                s.text(bx + 12, y0 - bh - 6, f"{v:.2f}", size=11.5, anchor="middle")
+            s.text(gx + 60, y0 + 20, mlabel, size=13, anchor="middle", color="#3a3a3a")
+    # legend
+    lx = 60
+    for sysk in systems:
+        s.rect(lx, 348, 18, 14, fill=PALETTE[sysk])
+        s.text(lx + 26, 360, LABELS[sysk], size=13, color="#3a3a3a")
+        lx += 26 + 8 * len(LABELS[sysk]) + 14
+    s.text(W / 2, 390, "same 32 test recordings, the authors' metric code; higher is better", size=12.5, anchor="middle", color="#6b6b6b")
+    return s.svg(W, H, "Order similarity and F1 for the two baselines and the two Stepwitness settings")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--site", type=Path, default=ROOT / "site" / "index.html")
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--no-results", action="store_true", help="skip the results chart (score files absent)")
     args = ap.parse_args()
     svg = draw(args.seed)
     html = args.site.read_text(encoding="utf-8")
     pattern = re.compile(r'(<div class="diagram">\n)<svg viewBox="0 0 1300 \d+".*?</svg>', re.S)
     assert len(pattern.findall(html)) == 1, "diagram block not found exactly once"
     html = pattern.sub(lambda m: m.group(1) + svg, html)
+    print(f"diagram written ({len(svg)} chars)")
+    if not args.no_results:
+        fig = ('<figure class="card sketch" id="results-sketch">\n' + draw_results(args.seed) + "\n"
+               '<figcaption>Order similarity and F1 on the test split. Grey and white are the authors\u2019 baseline trained on real video and on their synthetic images; yellow and pink are Stepwitness, trained on renders only, with the procedure guards on and off. Drawn from the score files.</figcaption>\n</figure>\n')
+        existing = re.compile(r'<figure class="card sketch" id="results-sketch">.*?</figure>\n', re.S)
+        if existing.search(html):
+            html = existing.sub(lambda m: fig, html)
+        else:
+            anchor = '<div class="tbl"><table>\n<thead><tr><th>Baseline</th><th>Trained on</th>'
+            assert html.count(anchor) == 1, "results table anchor not found exactly once"
+            html = html.replace(anchor, fig + anchor)
+        print("results chart written")
     args.site.write_text(html, encoding="utf-8", newline="\n")
-    print(f"diagram written into {args.site} ({len(svg)} chars)")
 
 
 if __name__ == "__main__":

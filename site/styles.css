@@ -114,3 +114,6 @@ td.flag { color: var(--red); font-weight: 600; }
 .pending { color: var(--muted); font-style: italic; }
 @media (max-width: 560px) { .kv { grid-template-columns: 1fr; gap: 2px; } .kv dt { padding-top: 10px; } h2 { font-size: 20px; } }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+.card.sketch { padding: 8px 10px 4px; }
+.card.sketch svg { display: block; width: 100%; height: auto; background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 6px; }
