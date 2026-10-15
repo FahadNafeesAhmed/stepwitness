@@ -19,15 +19,21 @@ else
   log "verifier v3 already built"
 fi
 
-if [ ! -f runs/phase3/localizer_v2/train/weights/best.pt ]; then
+LOCALIZER=runs/phase3/localizer_v2/train/weights/best.pt
+if [ ! -f "$LOCALIZER" ]; then
   log "localizer training (workers=0, imgsz 480, batch 8)"
-  $PY scripts/train_localizer.py --renders data/renders/v2 --out runs/phase3/localizer_v2 --model data/models/yolo/yolov8n.pt --epochs 10 --imgsz 480 --batch 8 --workers 0 >> "$LOG" 2>&1 || { log "localizer training FAILED"; exit 1; }
+  if ! $PY scripts/train_localizer.py --renders data/renders/v2 --out runs/phase3/localizer_v2 --model data/models/yolo/yolov8n.pt --epochs 10 --imgsz 480 --batch 8 --workers 0 >> "$LOG" 2>&1; then
+    log "localizer training FAILED; falling back to the patch localizer"
+    $PY scripts/build_patch_localizer.py --renders data/renders/v2 --out runs/phase3/localizer_patch --n 1500 >> "$LOG" 2>&1 || { log "patch localizer FAILED"; exit 1; }
+    LOCALIZER=runs/phase3/localizer_patch
+  fi
 else
   log "localizer already trained"
 fi
+log "localizer in use: $LOCALIZER"
 
 log "monitor (v3) over the test recordings"
-$PY scripts/run_monitor.py --verifier runs/phase3/verifier_v3 --verifier-kind v3 --localizer runs/phase3/localizer_v2/train/weights/best.pt --out runs/phase4/monitor_v3 --stride 1 >> "$LOG" 2>&1 || { log "monitor FAILED"; exit 1; }
+$PY scripts/run_monitor.py --verifier runs/phase3/verifier_v3 --verifier-kind v3 --localizer "$LOCALIZER" --out runs/phase4/monitor_v3 --stride 1 >> "$LOG" 2>&1 || { log "monitor FAILED"; exit 1; }
 
 log "scores"
 $PY scripts/evaluate_psr.py --predictions runs/phase4/monitor_v3 --out runs/phase4/monitor_v3 --label "Stepwitness v3" >> "$LOG" 2>&1

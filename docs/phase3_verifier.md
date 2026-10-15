@@ -38,5 +38,34 @@ Version 3 therefore changes three things:
    and a small attention-pooling head reads them, so a few patches that show a clip can dominate.
 3. **Higher input resolution.** 448 pixels instead of 224, so the clip is eight pixels, not four.
 
-Version 2 is kept, and the first end-to-end run uses it, because a measured weak point beats an
-unmeasured strong one.
+Version 2 is kept as the measured weak point.
+
+## Version 3: patch tokens at 448 px, state head and component-error head
+
+Built on 2026-10-14 from the same 13,200 renders and the same 80/20 split. Frozen DINOv2-base at
+448 pixels, patch tokens pooled to an 8 x 8 grid plus the CLS token, an attention-pooling head with
+four queries, a 22-way state output and an 11-way component-error output trained together, 30 epochs.
+
+| Measure on held-out renders | v2 | v3 |
+|---|---:|---:|
+| Correct state identified | 0.623 | 0.916 |
+| Exact label (state and every error digit) | 0.383 | 0.625 |
+| Component error: precision | | 0.641 |
+| Component error: recall | | 0.472 |
+| Component error: false-positive rate per component | | 0.012 |
+| Crop has some error: precision | 0.865 | 0.773 |
+| Crop has some error: recall | 0.110 | 0.541 |
+| Crop has some error: false-alarm rate | 0.015 | 0.138 |
+
+Reading: the state is now right nine times in ten, and about half of the small errors are seen in a
+single crop. The recognizer sees many crops of the same state, so what it can catch over a few
+seconds is higher than the single-crop recall; what that comes to on real footage is the number the
+monitor run gives.
+
+Cost of the change: tokens are 65 x 768 per crop instead of a single 1,536 vector, and the backbone
+runs at 448 pixels, roughly four times the compute of 224. On this GPU that is still well inside a
+10 fps budget.
+
+The three build failures before this result were all the machine running out of memory with the
+author's other applications open; the fixes that made the build survivable were a memory-mapped
+token cache, chunked copies to the GPU, and resumable extraction.

@@ -51,13 +51,19 @@ def run_recording(video: Path, verifier, embedder: Embedder, localizer, config: 
         if frame_no % stride:
             continue
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        res = localizer.predict(rgb, verbose=False, conf=conf, device=0, imgsz=640)[0]
         box = None
-        if len(res.boxes):
-            b = res.boxes
-            i = int(b.conf.argmax())
-            x0, y0, x1, y1 = b.xyxy[i].tolist()
-            box = [x0, y0, x1 - x0, y1 - y0]
+        if hasattr(localizer, "locate"):  # the fallback patch localizer
+            box, score = localizer.locate(Image.fromarray(rgb))
+            if box is not None and score < conf:
+                box = None
+        else:
+            res = localizer.predict(rgb, verbose=False, conf=conf, device=0, imgsz=640)[0]
+            if len(res.boxes):
+                b = res.boxes
+                i = int(b.conf.argmax())
+                x0, y0, x1, y1 = b.xyxy[i].tolist()
+                box = [x0, y0, x1 - x0, y1 - y0]
+        if box is not None:
             last_box = box
             n_detected += 1
         if box is None:
@@ -133,9 +139,14 @@ def main() -> None:
 
         verifier = MultiTaskVerifier.load(args.verifier)
     else:
-        verifier = Verifier.load(args.verifier)
+            verifier = Verifier.load(args.verifier)
     embedder = Embedder(args.model)
-    localizer = YOLO(str(args.localizer))
+    if args.localizer.is_dir() and (args.localizer / "patch_localizer.npz").exists():
+        from stepwitness.localizer_patch import PatchLocalizer
+
+        localizer = PatchLocalizer.load(args.localizer, embedder)
+    else:
+        localizer = YOLO(str(args.localizer))
     config = RecognizerConfig(threshold=args.threshold, decay=args.decay, min_posterior=args.min_posterior, error_frames=args.error_frames, error_margin=args.error_margin)
     summaries = []
     for name in names:
