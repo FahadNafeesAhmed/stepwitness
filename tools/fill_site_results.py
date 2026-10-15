@@ -26,7 +26,8 @@ def replace_one(s: str, pattern: str, new: str) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run", type=Path, required=True)
+    ap.add_argument("--run", type=Path, required=True, help="the run reported as the system (procedure guards on)")
+    ap.add_argument("--run-plain", type=Path, default=None, help="the same verifier output replayed with B3 constants and no guards")
     ap.add_argument("--site", type=Path, default=ROOT / "site" / "index.html")
     args = ap.parse_args()
 
@@ -35,12 +36,17 @@ def main() -> None:
     a, e = psr["all"], psr["with_errors"]
     s = args.site.read_text(encoding="utf-8")
 
-    row = (
-        '<tr id="ours-row"><td><strong>Stepwitness</strong></td><td>renders only</td>'
-        f'<td class="num">{a["pos"]:.3f}</td><td class="num">{a["f1"]:.3f}</td><td class="num">{a["delay_s"]:.1f} s</td>'
-        f'<td class="num">{e["pos"]:.3f}</td><td class="num">{e["f1"]:.3f}</td></tr>'
-    )
+    def cells(g_all, g_err):
+        return (f'<td class="num">{g_all["pos"]:.3f}</td><td class="num">{g_all["f1"]:.3f}</td><td class="num">{g_all["delay_s"]:.1f} s</td>'
+                f'<td class="num">{g_err["pos"]:.3f}</td><td class="num">{g_err["f1"]:.3f}</td>')
+
+    row = '<tr id="ours-row"><td><strong>Stepwitness</strong>, procedure guards on</td><td>renders only</td>' + cells(a, e) + '</tr>'
     s = replace_one(s, r'<tr id="ours-row">.*?</tr>', row)
+    if args.run_plain is not None:
+        pp = json.loads((args.run_plain / "psr_results.json").read_text())
+        row_plain = '<tr id="ours-row-plain"><td>Stepwitness, guards off, B3 constants</td><td>renders only</td>' + cells(pp["all"], pp["with_errors"]) + '</tr>'
+        s = replace_one(s, r'<tr id="ours-row-plain">.*?</tr>', row_plain)
+        print(row_plain)
 
     ee, om = flags["execution_error_flags"], flags["end_omission_flags"]
     line = (
